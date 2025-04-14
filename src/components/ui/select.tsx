@@ -46,7 +46,11 @@ const SelectTrigger = ({ children, className, ...props }: React.HTMLAttributes<H
 );
 SelectTrigger.displayName = "SelectTrigger";
 
-const SelectValue = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => (
+const SelectValue = ({ 
+  className, 
+  placeholder, 
+  ...props 
+}: React.HTMLAttributes<HTMLSpanElement> & { placeholder?: string }) => (
   <span className={cn("flex-grow text-sm truncate", className)} {...props} />
 );
 SelectValue.displayName = "SelectValue";
