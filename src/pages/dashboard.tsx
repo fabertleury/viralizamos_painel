@@ -283,9 +283,9 @@ export default function Dashboard() {
                       <div className="text-right">
                         <Badge
                           className={
-                            atividade.status === 'completo' || atividade.status === 'aprovado'
+                            atividade.status === 'sucesso' || atividade.status === 'aprovado'
                               ? 'bg-green-100 text-green-800'
-                              : atividade.status === 'processando' || atividade.status === 'pendente'
+                              : atividade.status === 'pendente'
                               ? 'bg-yellow-100 text-yellow-800'
                               : 'bg-red-100 text-red-800'
                           }
@@ -293,7 +293,7 @@ export default function Dashboard() {
                           {atividade.status}
                         </Badge>
                         <div className="text-sm text-gray-500 mt-1">
-                          {formatDate(atividade.data, 'dd/MM/yyyy HH:mm')}
+                          {formatDate(new Date(atividade.data), 'dd/MM/yyyy HH:mm')}
                         </div>
                       </div>
                     </div>

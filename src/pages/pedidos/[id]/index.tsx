@@ -1,22 +1,30 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
-import { useToast } from '@chakra-ui/react';
-import { FiClock, FiCheck, FiRefreshCw, FiAlertTriangle, FiShoppingBag, FiBarChart2, FiDollarSign, FiUser } from 'react-icons/fi';
+import { useToast, Spinner } from '@chakra-ui/react';
+import { FiClock, FiCheck, FiRefreshCw, FiAlertTriangle, FiShoppingBag, FiBarChart2, FiDollarSign, FiUser, FiArrowLeft } from 'react-icons/fi';
 import { Badge, Icon, Flex, Container, Button, Box, Heading, Text, HStack, Grid, GridItem, Card, CardHeader, CardBody, Stat, StatLabel, StatNumber, StatHelpText, Divider, Table, Thead, Tr, Td, VStack, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter } from '@chakra-ui/react';
 import axios from 'axios';
 import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
-import AdminLayout from '@/components/AdminLayout';
+import { useAuth } from '../../../contexts/AuthContext';
+
+// Interface para o pedido
+interface Pedido {
+  id: string;
+  status: string;
+  amount: number;
+  created_at: Date;
+  // Adicione outras propriedades conforme necessário
+}
 
 const PedidoDetalhes: React.FC = () => {
   const router = useRouter();
   const toast = useToast();
-  const [pedido, setPedido] = useState(null);
+  const [pedido, setPedido] = useState<Pedido | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const { authLoading } = useAuth();
+  const { isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
-  const cancelRef = React.useRef();
+  const cancelRef = React.useRef<HTMLButtonElement>(null);
 
   const carregarPedido = async () => {
     const { id } = router.query;
@@ -179,7 +187,7 @@ const PedidoDetalhes: React.FC = () => {
   }
 
   return (
-    <AdminLayout>
+    <Box>
       <Container maxW="container.xl" py={6}>
         <Button
           as={Link}
@@ -220,7 +228,7 @@ const PedidoDetalhes: React.FC = () => {
                   Pedido #{pedido.id}
                 </Heading>
                 <Text color="gray.500" mt={1}>
-                  Criado em {formatarData(pedido.data_criacao)}
+                  Criado em {formatarData(pedido.created_at)}
                 </Text>
               </Box>
               
@@ -295,7 +303,7 @@ const PedidoDetalhes: React.FC = () => {
                         <StatLabel>Valor</StatLabel>
                         <StatNumber fontSize="md" display="flex" alignItems="center">
                           <Icon as={FiDollarSign} mr={2} />
-                          {formatarValor(pedido.valor)}
+                          {formatarValor(pedido.amount)}
                         </StatNumber>
                       </Stat>
                     </Grid>
@@ -534,7 +542,7 @@ const PedidoDetalhes: React.FC = () => {
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>
-    </AdminLayout>
+    </Box>
   );
 };
 

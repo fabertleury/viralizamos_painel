@@ -122,7 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               break;
           }
         }
-      } catch (apiError) {
+      } catch (apiError: any) {
         console.error(`Erro ao consultar API do provedor para o pedido ${id}:`, apiError);
         
         // Registrar erro, mas não falhar a atualização
