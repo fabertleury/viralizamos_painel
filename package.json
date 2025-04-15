@@ -25,6 +25,7 @@
     "@emotion/styled": "^11.11.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.9",
+    "apexcharts": "^3.45.1",
     "apollo-server-micro": "^3.13.0",
     "axios": "^1.8.4",
     "bcryptjs": "^3.0.2",

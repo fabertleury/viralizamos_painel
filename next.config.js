@@ -29,6 +29,21 @@ const nextConfig = {
     // Isso deve ser removido depois de corrigir todos os problemas de tipo
     ignoreBuildErrors: true,
   },
+  webpack: (config, { isServer }) => {
+    // Adicionar resolução para o ApexCharts
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false,
+    };
+
+    // Caso esteja no servidor, solucionar problemas com bibliotecas client-side
+    if (isServer) {
+      config.externals = [...config.externals, 'apexcharts'];
+    }
+
+    return config;
+  },
 };
 
 module.exports = nextConfig; 
