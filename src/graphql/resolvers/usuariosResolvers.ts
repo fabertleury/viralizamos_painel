@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma';
+import axios from 'axios';
 
 // Define types for filter and pagination
 interface PaginacaoInput {
@@ -13,73 +13,68 @@ interface FiltroUsuarioInput {
   termoBusca?: string;
 }
 
+// Configuração da API de usuários
+const apiUrl = process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api';
+const usuariosApi = axios.create({
+  baseURL: apiUrl,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 export const usuariosResolvers = {
   Query: {
     usuarios: async (_: any, { filtro, paginacao }: { filtro?: FiltroUsuarioInput, paginacao: PaginacaoInput }) => {
       try {
         const { pagina, limite } = paginacao;
-        const skip = (pagina - 1) * limite;
         
-        // Construir a query com filtros
-        const where: any = {};
+        // Construir parâmetros para a requisição à API
+        const params: Record<string, any> = {
+          page: pagina,
+          limit: limite
+        };
         
+        // Adicionar filtros, se existirem
         if (filtro) {
           if (filtro.ativo !== undefined) {
-            where.active = filtro.ativo;
-          }
-          
-          if (filtro.dataInicio) {
-            where.createdAt = {
-              ...(where.createdAt || {}),
-              gte: new Date(filtro.dataInicio)
-            };
-          }
-          
-          if (filtro.dataFim) {
-            where.createdAt = {
-              ...(where.createdAt || {}),
-              lte: new Date(filtro.dataFim)
-            };
+            params.active = filtro.ativo;
           }
           
           if (filtro.termoBusca) {
-            where.OR = [
-              { name: { contains: filtro.termoBusca, mode: 'insensitive' } },
-              { email: { contains: filtro.termoBusca, mode: 'insensitive' } }
-            ];
+            params.search = filtro.termoBusca;
+          }
+          
+          if (filtro.dataInicio) {
+            params.startDate = filtro.dataInicio;
+          }
+          
+          if (filtro.dataFim) {
+            params.endDate = filtro.dataFim;
           }
         }
         
-        // Executar contagem e busca em paralelo
-        const [usuarios, total] = await Promise.all([
-          prisma.user.findMany({
-            where,
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              active: true,
-              lastLogin: true,
-              createdAt: true,
-              role: true
-            },
-            skip,
-            take: limite,
-            orderBy: {
-              createdAt: 'desc'
-            }
-          }),
-          prisma.user.count({ where })
-        ]);
+        console.log(`[API:Usuarios] Tentando API REST: ${apiUrl}/admin/users/list`);
         
-        // Converter para o formato esperado pelo GraphQL
-        const usuariosFormatados = usuarios.map(u => ({
+        // Chamar a API de usuários
+        const response = await usuariosApi.get('/admin/users/list', { 
+          params,
+          headers: {
+            'Authorization': `ApiKey ${process.env.PAGAMENTOS_API_KEY}`
+          }
+        });
+        
+        const users = response.data.users || [];
+        const total = response.data.total || 0;
+        
+        // Mapear o resultado da API para o formato esperado pelo GraphQL
+        const usuariosFormatados = users.map((u: any) => ({
           id: u.id,
           nome: u.name,
           email: u.email,
           ativo: u.active,
-          dataUltimoLogin: u.lastLogin?.toISOString() || null,
-          dataCriacao: u.createdAt.toISOString()
+          dataUltimoLogin: u.last_login || null,
+          dataCriacao: u.created_at
         }));
         
         return {
@@ -88,40 +83,39 @@ export const usuariosResolvers = {
         };
       } catch (error) {
         console.error('Erro ao buscar usuários:', error);
-        throw new Error('Erro ao buscar usuários');
+        throw new Error('Erro ao buscar usuários da API');
       }
     },
     
     usuario: async (_: any, { id }: { id: string }) => {
       try {
-        const usuario = await prisma.user.findUnique({
-          where: { id },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            active: true,
-            lastLogin: true,
-            createdAt: true,
-            role: true
+        console.log(`[API:Usuario] Tentando buscar usuário ${id} via API REST`);
+        
+        // Buscar usuário por ID
+        const response = await usuariosApi.get(`/admin/users/${id}`, {
+          headers: {
+            'Authorization': `ApiKey ${process.env.PAGAMENTOS_API_KEY}`
           }
         });
         
-        if (!usuario) {
+        if (!response.data || response.data.error) {
           return null;
         }
         
+        const u = response.data;
+        
+        // Mapear o resultado da API para o formato esperado pelo GraphQL
         return {
-          id: usuario.id,
-          nome: usuario.name,
-          email: usuario.email,
-          ativo: usuario.active,
-          dataUltimoLogin: usuario.lastLogin?.toISOString() || null,
-          dataCriacao: usuario.createdAt.toISOString()
+          id: u.id,
+          nome: u.name,
+          email: u.email,
+          ativo: u.active,
+          dataUltimoLogin: u.last_login || null,
+          dataCriacao: u.created_at
         };
       } catch (error) {
         console.error(`Erro ao buscar usuário ${id}:`, error);
-        throw new Error(`Erro ao buscar usuário ${id}`);
+        throw new Error(`Erro ao buscar usuário ${id} da API`);
       }
     }
   },

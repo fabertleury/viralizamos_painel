@@ -1,4 +1,4 @@
-import { ordersPool } from '../../lib/prisma';
+import axios from 'axios';
 
 // Define types for filter and pagination
 interface PaginacaoInput {
@@ -14,171 +14,148 @@ interface FiltroInput {
   termoBusca?: string;
 }
 
+// Configuração da API de orders
+const ordersApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com/api',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 export const pedidosResolvers = {
   Query: {
     pedidos: async (_: any, { filtro, paginacao }: { filtro?: FiltroInput, paginacao: PaginacaoInput }) => {
       try {
         const { pagina, limite } = paginacao;
-        const offset = (pagina - 1) * limite;
         
-        let query = `
-          SELECT 
-            o.id, 
-            o.created_at as data_criacao, 
-            o.provider_id as provedor_id,
-            p.name as provedor_nome,
-            o.service_id as produto_id,
-            s.name as produto_nome,
-            o.quantity as quantidade,
-            o.price as valor,
-            o.status,
-            o.user_id as cliente_id,
-            u.name as cliente_nome,
-            u.email as cliente_email,
-            o.transaction_id as transacao_id,
-            o.provider_order_id,
-            o.api_response as resposta,
-            o.error_message as erro,
-            o.last_check as ultima_verificacao
-          FROM 
-            orders o
-          LEFT JOIN 
-            providers p ON o.provider_id = p.id
-          LEFT JOIN 
-            services s ON o.service_id = s.id
-          LEFT JOIN 
-            users u ON o.user_id = u.id
-          WHERE 1=1
-        `;
+        // Construir parâmetros para a requisição à API
+        const params: Record<string, any> = {
+          page: pagina,
+          limit: limite
+        };
         
-        const queryParams: any[] = [];
-        let paramCount = 1;
-
-        // Aplicar filtros se existirem
+        // Adicionar filtros, se existirem
         if (filtro) {
           if (filtro.status && filtro.status !== 'todos') {
-            query += ` AND o.status = $${paramCount++}`;
-            queryParams.push(filtro.status);
+            params.status = filtro.status;
           }
           
           if (filtro.provedor && filtro.provedor !== 'todos') {
-            query += ` AND o.provider_id = $${paramCount++}`;
-            queryParams.push(filtro.provedor);
-          }
-          
-          if (filtro.dataInicio) {
-            query += ` AND o.created_at >= $${paramCount++}`;
-            queryParams.push(filtro.dataInicio);
-          }
-          
-          if (filtro.dataFim) {
-            query += ` AND o.created_at <= $${paramCount++}`;
-            queryParams.push(filtro.dataFim);
+            params.provider = filtro.provedor;
           }
           
           if (filtro.termoBusca) {
-            query += ` AND (
-              o.id::text ILIKE $${paramCount} OR 
-              u.name ILIKE $${paramCount} OR 
-              u.email ILIKE $${paramCount} OR
-              s.name ILIKE $${paramCount} OR
-              o.provider_order_id ILIKE $${paramCount}
-            )`;
-            queryParams.push(`%${filtro.termoBusca}%`);
-            paramCount++;
+            params.search = filtro.termoBusca;
+          }
+          
+          if (filtro.dataInicio) {
+            params.startDate = filtro.dataInicio;
+          }
+          
+          if (filtro.dataFim) {
+            params.endDate = filtro.dataFim;
           }
         }
         
-        // Query para contagem total
-        const countQuery = `SELECT COUNT(*) FROM (${query}) AS count_query`;
-        const countResult = await ordersPool.query(countQuery, queryParams);
-        const total = parseInt(countResult.rows[0].count);
+        console.log(`[API:Pedidos] Tentando API REST: ${ordersApi.defaults.baseURL}/orders/list`);
         
-        // Adicionar ordenação e paginação
-        query += ` ORDER BY o.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
-        queryParams.push(limite);
-        queryParams.push(offset);
+        // Chamar a API de pedidos
+        const response = await ordersApi.get('/orders/list', { params });
         
-        const result = await ordersPool.query(query, queryParams);
+        const orders = response.data.orders || [];
+        const total = response.data.total || 0;
+        
+        // Mapear o resultado da API para o formato esperado pelo GraphQL
+        const pedidos = orders.map((o: any) => ({
+          id: o.id,
+          dataCriacao: o.created_at,
+          provedorId: o.provider_id,
+          provedorNome: o.provider_name,
+          produtoId: o.service_id,
+          produtoNome: o.service_name,
+          quantidade: o.quantity,
+          valor: o.price,
+          status: o.status,
+          clienteId: o.user_id,
+          clienteNome: o.customer_name,
+          clienteEmail: o.customer_email,
+          transacaoId: o.transaction_id,
+          providerOrderId: o.provider_order_id,
+          resposta: o.api_response,
+          erro: o.error_message,
+          ultimaVerificacao: o.last_check
+        }));
         
         return {
-          pedidos: result.rows,
+          pedidos,
           total
         };
       } catch (error) {
         console.error('Erro ao buscar pedidos:', error);
-        throw new Error('Erro ao buscar pedidos do banco de dados');
+        throw new Error('Erro ao buscar pedidos da API');
       }
     },
     
     pedido: async (_: any, { id }: { id: string }) => {
       try {
-        const query = `
-          SELECT 
-            o.id, 
-            o.created_at as data_criacao, 
-            o.provider_id as provedor_id,
-            p.name as provedor_nome,
-            o.service_id as produto_id,
-            s.name as produto_nome,
-            o.quantity as quantidade,
-            o.price as valor,
-            o.status,
-            o.user_id as cliente_id,
-            u.name as cliente_nome,
-            u.email as cliente_email,
-            o.transaction_id as transacao_id,
-            o.provider_order_id,
-            o.api_response as resposta,
-            o.error_message as erro,
-            o.last_check as ultima_verificacao
-          FROM 
-            orders o
-          LEFT JOIN 
-            providers p ON o.provider_id = p.id
-          LEFT JOIN 
-            services s ON o.service_id = s.id
-          LEFT JOIN 
-            users u ON o.user_id = u.id
-          WHERE 
-            o.id = $1
-        `;
+        console.log(`[API:Pedido] Tentando buscar pedido ${id} via API REST`);
         
-        const result = await ordersPool.query(query, [id]);
+        // Buscar pedido por ID
+        const response = await ordersApi.get(`/orders/${id}`);
         
-        if (result.rows.length === 0) {
+        if (!response.data || response.data.error) {
           return null;
         }
         
-        return result.rows[0];
+        const o = response.data;
+        
+        // Mapear o resultado da API para o formato esperado pelo GraphQL
+        return {
+          id: o.id,
+          dataCriacao: o.created_at,
+          provedorId: o.provider_id,
+          provedorNome: o.provider_name,
+          produtoId: o.service_id,
+          produtoNome: o.service_name,
+          quantidade: o.quantity,
+          valor: o.price,
+          status: o.status,
+          clienteId: o.user_id,
+          clienteNome: o.customer_name,
+          clienteEmail: o.customer_email,
+          transacaoId: o.transaction_id,
+          providerOrderId: o.provider_order_id,
+          resposta: o.api_response,
+          erro: o.error_message,
+          ultimaVerificacao: o.last_check
+        };
       } catch (error) {
         console.error(`Erro ao buscar pedido ${id}:`, error);
-        throw new Error(`Erro ao buscar pedido ${id}`);
+        throw new Error(`Erro ao buscar pedido ${id} da API`);
       }
     },
     
     provedores: async () => {
       try {
-        const query = `
-          SELECT 
-            id,
-            name as nome,
-            type as tipo,
-            status,
-            balance as saldo
-          FROM 
-            providers
-          WHERE 
-            status = 'active'
-          ORDER BY 
-            name ASC
-        `;
+        console.log(`[API:Provedores] Tentando API REST: ${ordersApi.defaults.baseURL}/providers/list`);
         
-        const result = await ordersPool.query(query);
-        return result.rows;
+        // Buscar lista de provedores
+        const response = await ordersApi.get('/providers/list');
+        
+        const providers = response.data || [];
+        
+        // Mapear o resultado da API para o formato esperado pelo GraphQL
+        return providers.map((p: any) => ({
+          id: p.id,
+          nome: p.name,
+          tipo: p.type,
+          status: p.status,
+          saldo: p.balance
+        }));
       } catch (error) {
         console.error('Erro ao buscar provedores:', error);
-        throw new Error('Erro ao buscar provedores');
+        throw new Error('Erro ao buscar provedores da API');
       }
     }
   },
@@ -186,33 +163,21 @@ export const pedidosResolvers = {
   Mutation: {
     reenviarPedido: async (_: any, { id }: { id: string }) => {
       try {
-        // Atualizando o status do pedido para "processando" e marcando para reprocessamento
-        const query = `
-          UPDATE orders
-          SET 
-            status = 'processando',
-            retry_count = 0,
-            last_check = NULL,
-            error_message = NULL,
-            updated_at = NOW()
-          WHERE 
-            id = $1 AND 
-            (status = 'falha' OR status = 'pendente')
-          RETURNING id
-        `;
+        console.log(`[API:ReenviarPedido] Tentando API REST: ${ordersApi.defaults.baseURL}/orders/${id}/retry`);
         
-        const result = await ordersPool.query(query, [id]);
+        // Chamar API para reenviar pedido
+        const response = await ordersApi.post(`/orders/${id}/retry`);
         
-        if (result.rows.length === 0) {
+        if (response.data.error) {
           return {
             sucesso: false,
-            mensagem: 'Pedido não encontrado ou não está em um estado que permita reenvio'
+            mensagem: response.data.error
           };
         }
         
         return {
           sucesso: true,
-          mensagem: `Pedido ${id} marcado para reprocessamento`
+          mensagem: response.data.message || `Pedido ${id} marcado para reprocessamento`
         };
       } catch (error: any) {
         console.error(`Erro ao reenviar pedido ${id}:`, error);

@@ -1,4 +1,4 @@
-import { pagamentosPool } from '../../lib/prisma';
+import axios from 'axios';
 
 // Define types for filter and pagination
 interface PaginacaoInput {
@@ -14,129 +14,113 @@ interface FiltroTransacaoInput {
   termoBusca?: string;
 }
 
+// Configuração da API de pagamentos
+const pagamentosApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 export const transacoesResolvers = {
   Query: {
     transacoes: async (_: any, { filtro, paginacao }: { filtro?: FiltroTransacaoInput, paginacao: PaginacaoInput }) => {
       try {
         const { pagina, limite } = paginacao;
-        const offset = (pagina - 1) * limite;
         
-        let query = `
-          SELECT 
-            t.id, 
-            t.data_criacao, 
-            t.valor, 
-            t.status, 
-            t.metodo_pagamento as metodoPagamento,
-            t.cliente_id as clienteId,
-            u.nome as clienteNome,
-            u.email as clienteEmail,
-            t.produto_id as produtoId,
-            p.nome as produtoNome,
-            t.order_id as orderId
-          FROM 
-            transacoes t
-          LEFT JOIN 
-            usuarios u ON t.cliente_id = u.id
-          LEFT JOIN 
-            produtos p ON t.produto_id = p.id
-          WHERE 1=1
-        `;
+        // Construir parâmetros para a requisição à API
+        const params: Record<string, any> = {
+          page: pagina,
+          limit: limite
+        };
         
-        const queryParams: any[] = [];
-        let paramCount = 1;
-
-        // Aplicar filtros se existirem
+        // Adicionar filtros, se existirem
         if (filtro) {
           if (filtro.status && filtro.status !== 'todos') {
-            query += ` AND t.status = $${paramCount++}`;
-            queryParams.push(filtro.status);
+            params.status = filtro.status;
           }
           
           if (filtro.metodo && filtro.metodo !== 'todos') {
-            query += ` AND t.metodo_pagamento = $${paramCount++}`;
-            queryParams.push(filtro.metodo);
-          }
-          
-          if (filtro.dataInicio) {
-            query += ` AND t.data_criacao >= $${paramCount++}`;
-            queryParams.push(filtro.dataInicio);
-          }
-          
-          if (filtro.dataFim) {
-            query += ` AND t.data_criacao <= $${paramCount++}`;
-            queryParams.push(filtro.dataFim);
+            params.method = filtro.metodo;
           }
           
           if (filtro.termoBusca) {
-            query += ` AND (
-              t.id::text ILIKE $${paramCount} OR 
-              u.nome ILIKE $${paramCount} OR 
-              u.email ILIKE $${paramCount} OR
-              p.nome ILIKE $${paramCount}
-            )`;
-            queryParams.push(`%${filtro.termoBusca}%`);
-            paramCount++;
+            params.search = filtro.termoBusca;
+          }
+          
+          if (filtro.dataInicio) {
+            params.startDate = filtro.dataInicio;
+          }
+          
+          if (filtro.dataFim) {
+            params.endDate = filtro.dataFim;
           }
         }
         
-        // Query para contagem total
-        const countQuery = `SELECT COUNT(*) FROM (${query}) AS count_query`;
-        const countResult = await pagamentosPool.query(countQuery, queryParams);
-        const total = parseInt(countResult.rows[0].count);
+        console.log(`[API:Transacoes] Tentando API REST: ${pagamentosApi.defaults.baseURL}/transactions/list`);
         
-        // Adicionar ordenação e paginação
-        query += ` ORDER BY t.data_criacao DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
-        queryParams.push(limite);
-        queryParams.push(offset);
+        // Chamar a API de transações
+        const response = await pagamentosApi.get('/transactions/list', { params });
         
-        const result = await pagamentosPool.query(query, queryParams);
+        const transactions = response.data.transactions || [];
+        const total = response.data.total || 0;
+        
+        // Mapear o resultado da API para o formato esperado pelo GraphQL
+        const transacoes = transactions.map((t: any) => ({
+          id: t.id,
+          dataCriacao: t.created_at,
+          valor: t.amount,
+          status: t.status.toUpperCase(),
+          metodoPagamento: t.method.toUpperCase(),
+          clienteId: t.payment_request?.customer_id || '',
+          clienteNome: t.payment_request?.customer_name || '',
+          clienteEmail: t.payment_request?.customer_email || '',
+          produtoId: t.payment_request?.service_id || '',
+          produtoNome: t.payment_request?.service_name || '',
+          orderId: t.external_id || ''
+        }));
         
         return {
-          transacoes: result.rows,
+          transacoes,
           total
         };
       } catch (error) {
         console.error('Erro ao buscar transações:', error);
-        throw new Error('Erro ao buscar transações do banco de dados');
+        throw new Error('Erro ao buscar transações da API');
       }
     },
     
     transacao: async (_: any, { id }: { id: string }) => {
       try {
-        const query = `
-          SELECT 
-            t.id, 
-            t.data_criacao as dataCriacao, 
-            t.valor, 
-            t.status, 
-            t.metodo_pagamento as metodoPagamento,
-            t.cliente_id as clienteId,
-            u.nome as clienteNome,
-            u.email as clienteEmail,
-            t.produto_id as produtoId,
-            p.nome as produtoNome,
-            t.order_id as orderId
-          FROM 
-            transacoes t
-          LEFT JOIN 
-            usuarios u ON t.cliente_id = u.id
-          LEFT JOIN 
-            produtos p ON t.produto_id = p.id
-          WHERE 
-            t.id = $1
-        `;
+        console.log(`[API:Transacao] Tentando buscar transação ${id} via API REST`);
         
-        const result = await pagamentosPool.query(query, [id]);
+        // Buscar transação por ID
+        const response = await pagamentosApi.get(`/transactions/${id}`);
         
-        if (result.rows.length === 0) {
+        if (!response.data || response.data.error) {
           return null;
         }
         
-        return result.rows[0];
+        const t = response.data;
+        
+        // Mapear o resultado da API para o formato esperado pelo GraphQL
+        return {
+          id: t.id,
+          dataCriacao: t.created_at,
+          valor: t.amount,
+          status: t.status.toUpperCase(),
+          metodoPagamento: t.method.toUpperCase(),
+          clienteId: t.customer?.id || '',
+          clienteNome: t.customer?.name || t.customer_name || '',
+          clienteEmail: t.customer?.email || t.customer_email || '',
+          produtoId: '',
+          produtoNome: t.payment_request?.service_name || '',
+          orderId: t.external_id || ''
+        };
       } catch (error) {
         console.error(`Erro ao buscar transação ${id}:`, error);
-        throw new Error(`Erro ao buscar transação ${id}`);
+        throw new Error(`Erro ao buscar transação ${id} da API`);
       }
     }
   },

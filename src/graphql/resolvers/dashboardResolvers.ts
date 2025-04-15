@@ -1,22 +1,54 @@
-import { prisma, ordersPool, pagamentosPool, calcularCrescimento } from '../../lib/prisma';
+import axios from 'axios';
+
+// Configuração das APIs
+const pagamentosApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const ordersApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com/api',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Função para calcular crescimento percentual
+const calcularCrescimento = (atual: number, anterior: number): number => {
+  if (anterior === 0) return atual > 0 ? 100 : 0;
+  return Math.round(((atual - anterior) / anterior) * 100);
+};
 
 // Funções auxiliares para buscar dados de estatísticas
 async function obterEstatisticasPedidos() {
   try {
-    const query = `
-      SELECT 
-        COUNT(*) as total_pedidos,
-        SUM(CASE WHEN status = 'completo' THEN 1 ELSE 0 END) as total_completos,
-        SUM(CASE WHEN status = 'processando' THEN 1 ELSE 0 END) as total_processando,
-        SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as total_pendentes,
-        SUM(CASE WHEN status = 'falha' THEN 1 ELSE 0 END) as total_falhas,
-        SUM(price) as valor_total
-      FROM orders
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-    `;
+    console.log('[API:Dashboard] Buscando estatísticas de pedidos');
     
-    const result = await ordersPool.query(query);
-    return result.rows[0];
+    const response = await ordersApi.get('/stats/overview', {
+      params: {
+        period: 30
+      }
+    });
+    
+    if (!response.data) {
+      throw new Error('Não foi possível obter estatísticas de pedidos');
+    }
+    
+    const dados = response.data;
+    
+    return {
+      total_pedidos: dados.total || 0,
+      total_completos: dados.completed || 0,
+      total_processando: dados.processing || 0,
+      total_pendentes: dados.pending || 0,
+      total_falhas: dados.failed || 0,
+      valor_total: dados.total_value || 0,
+      crescimento: dados.growth || 0
+    };
   } catch (error) {
     console.error('Erro ao obter estatísticas de pedidos:', error);
     return {
@@ -25,83 +57,70 @@ async function obterEstatisticasPedidos() {
       total_processando: 0,
       total_pendentes: 0,
       total_falhas: 0,
-      valor_total: 0
+      valor_total: 0,
+      crescimento: 0
     };
   }
 }
 
 async function obterEstatisticasTransacoes() {
   try {
-    const query = `
-      SELECT 
-        COUNT(*) as total_transacoes,
-        SUM(CASE WHEN status = 'aprovado' THEN 1 ELSE 0 END) as total_aprovadas,
-        SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as total_pendentes,
-        SUM(CASE WHEN status = 'recusado' THEN 1 ELSE 0 END) as total_recusadas,
-        SUM(CASE WHEN status = 'aprovado' THEN valor ELSE 0 END) as valor_total_aprovado
-      FROM transacoes
-      WHERE data_criacao >= NOW() - INTERVAL '30 days'
-    `;
+    console.log('[API:Dashboard] Buscando estatísticas de transações');
     
-    const result = await pagamentosPool.query(query);
-    return result.rows[0];
+    const response = await pagamentosApi.get('/stats/transactions', {
+      params: {
+        period: 30
+      }
+    });
+    
+    if (!response.data) {
+      throw new Error('Não foi possível obter estatísticas de transações');
+    }
+    
+    const dados = response.data;
+    
+    return {
+      total: dados.total || 0,
+      aprovadas: dados.approved || 0,
+      pendentes: dados.pending || 0,
+      recusadas: dados.declined || 0,
+      valorTotal: dados.total_amount || 0,
+      crescimento: dados.growth || 0
+    };
   } catch (error) {
     console.error('Erro ao obter estatísticas de transações:', error);
     return {
-      total_transacoes: 0,
-      total_aprovadas: 0,
-      total_pendentes: 0,
-      total_recusadas: 0,
-      valor_total_aprovado: 0
+      total: 0,
+      aprovadas: 0,
+      pendentes: 0,
+      recusadas: 0,
+      valorTotal: 0,
+      crescimento: 0
     };
   }
 }
 
 async function obterEstatisticasUsuarios() {
   try {
-    // Busca total de usuários
-    const totalUsuarios = await prisma.user.count();
+    console.log('[API:Dashboard] Buscando estatísticas de usuários');
     
-    // Busca usuários ativos (que fizeram login nos últimos 30 dias)
-    const ativos = await prisma.user.count({
-      where: {
-        lastLogin: {
-          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        }
+    const response = await pagamentosApi.get('/stats/users', {
+      headers: {
+        'Authorization': `ApiKey ${process.env.PAGAMENTOS_API_KEY}`
       }
     });
     
-    // Busca novos usuários (criados nos últimos 30 dias)
-    const hoje = new Date();
-    const ha30Dias = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const ha60Dias = new Date(hoje.getTime() - 60 * 24 * 60 * 60 * 1000);
+    if (!response.data) {
+      throw new Error('Não foi possível obter estatísticas de usuários');
+    }
     
-    const novos = await prisma.user.count({
-      where: {
-        createdAt: {
-          gte: ha30Dias
-        }
-      }
-    });
-    
-    // Busca usuários criados no período anterior (60-30 dias atrás) para calcular crescimento
-    const anteriores = await prisma.user.count({
-      where: {
-        createdAt: {
-          gte: ha60Dias,
-          lt: ha30Dias
-        }
-      }
-    });
-    
-    // Calcular crescimento
-    const crescimento = calcularCrescimento(novos, anteriores);
+    const dados = response.data;
     
     return {
-      total: totalUsuarios,
-      ativos,
-      novos,
-      crescimento
+      total: dados.total || 0,
+      ativos: dados.active || 0,
+      novos: dados.new || 0,
+      crescimento: dados.growth || 0
     };
   } catch (error) {
     console.error('Erro ao obter estatísticas de usuários:', error);
@@ -114,110 +133,100 @@ async function obterEstatisticasUsuarios() {
   }
 }
 
-async function obterPedidosPorPeriodo(dias = 7) {
-  try {
-    const query = `
-      SELECT 
-        DATE(created_at) as data,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'completo' THEN 1 ELSE 0 END) as completos,
-        SUM(CASE WHEN status = 'falha' THEN 1 ELSE 0 END) as falhas
-      FROM 
-        orders
-      WHERE 
-        created_at >= NOW() - INTERVAL '${dias} days'
-      GROUP BY 
-        DATE(created_at)
-      ORDER BY 
-        data
-    `;
-    
-    const result = await ordersPool.query(query);
-    return result.rows;
-  } catch (error) {
-    console.error(`Erro ao obter pedidos por período (${dias} dias):`, error);
-    return [];
-  }
-}
-
 async function obterTransacoesPorPeriodo(dias = 7) {
   try {
-    const query = `
-      SELECT 
-        DATE(data_criacao) as data,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'aprovado' THEN valor ELSE 0 END) as valor_aprovado
-      FROM 
-        transacoes
-      WHERE 
-        data_criacao >= NOW() - INTERVAL '${dias} days'
-      GROUP BY 
-        DATE(data_criacao)
-      ORDER BY 
-        data
-    `;
+    console.log(`[API:Dashboard] Buscando transações por período (${dias} dias)`);
     
-    const result = await pagamentosPool.query(query);
-    return result.rows;
+    const response = await pagamentosApi.get('/stats/transactions/daily', {
+      params: {
+        days: dias
+      }
+    });
+    
+    if (!response.data || !Array.isArray(response.data)) {
+      return [];
+    }
+    
+    return response.data.map((item: any) => ({
+      data: item.date,
+      total: item.count || 0,
+      valorAprovado: item.approved_amount || 0
+    }));
   } catch (error) {
     console.error(`Erro ao obter transações por período (${dias} dias):`, error);
     return [];
   }
 }
 
+async function obterPedidosPorPeriodo(dias = 7) {
+  try {
+    console.log(`[API:Dashboard] Buscando pedidos por período (${dias} dias)`);
+    
+    const response = await ordersApi.get('/stats/orders/daily', {
+      params: {
+        days: dias
+      }
+    });
+    
+    if (!response.data || !Array.isArray(response.data)) {
+      return [];
+    }
+    
+    return response.data.map((item: any) => ({
+      data: item.date,
+      total: item.count || 0,
+      completos: item.completed || 0,
+      falhas: item.failed || 0
+    }));
+  } catch (error) {
+    console.error(`Erro ao obter pedidos por período (${dias} dias):`, error);
+    return [];
+  }
+}
+
 async function obterAtividadesRecentes(limite = 10) {
   try {
-    // Buscar pedidos recentes
-    const pedidosQuery = `
-      SELECT 
-        'pedido' as tipo,
-        o.id,
-        o.created_at as data,
-        u.name as usuario,
-        s.name as item,
-        o.status,
-        o.price as valor
-      FROM 
-        orders o
-      LEFT JOIN 
-        users u ON o.user_id = u.id
-      LEFT JOIN 
-        services s ON o.service_id = s.id
-      ORDER BY 
-        o.created_at DESC
-      LIMIT $1
-    `;
+    console.log(`[API:Dashboard] Buscando atividades recentes (limite ${limite})`);
     
-    // Buscar transações recentes
-    const transacoesQuery = `
-      SELECT 
-        'transacao' as tipo,
-        t.id,
-        t.data_criacao as data,
-        u.nome as usuario,
-        p.nome as item,
-        t.status,
-        t.valor
-      FROM 
-        transacoes t
-      LEFT JOIN 
-        usuarios u ON t.cliente_id = u.id
-      LEFT JOIN 
-        produtos p ON t.produto_id = p.id
-      ORDER BY 
-        t.data_criacao DESC
-      LIMIT $1
-    `;
-    
-    const [pedidosResult, transacoesResult] = await Promise.all([
-      ordersPool.query(pedidosQuery, [limite]),
-      pagamentosPool.query(transacoesQuery, [limite])
+    const [pedidosResponse, transacoesResponse] = await Promise.all([
+      ordersApi.get('/orders/list', {
+        params: {
+          limit: limite,
+          page: 1
+        }
+      }),
+      pagamentosApi.get('/transactions/list', {
+        params: {
+          limit: limite,
+          page: 1
+        }
+      })
     ]);
+    
+    const pedidos = (pedidosResponse.data?.orders || []).map((p: any) => ({
+      tipo: 'pedido',
+      id: p.id,
+      data: p.created_at,
+      usuario: p.customer_name || 'N/A',
+      item: p.service_name || 'N/A',
+      status: p.status,
+      valor: p.price
+    }));
+    
+    const transacoes = (transacoesResponse.data?.transactions || []).map((t: any) => ({
+      tipo: 'transacao',
+      id: t.id,
+      data: t.created_at,
+      usuario: t.payment_request?.customer_name || 'N/A',
+      item: t.payment_request?.service_name || 'N/A',
+      status: t.status,
+      valor: t.amount
+    }));
     
     // Combinar resultados e ordenar por data
     const atividades = [
-      ...pedidosResult.rows,
-      ...transacoesResult.rows
+      ...pedidos,
+      ...transacoes
     ].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
     .slice(0, limite);
     
@@ -260,28 +269,17 @@ export const dashboardResolvers = {
           ]
         };
         
-        // Calcular crescimentos (temporário)
-        const crescimentoTransacoes = 23; // Valor fixo temporário  
-        const crescimentoPedidos = 15; // Valor fixo temporário
-        
         return {
           estatisticas: {
-            transacoes: {
-              total: Number(estatisticasTransacoes.total_transacoes) || 0,
-              aprovadas: Number(estatisticasTransacoes.total_aprovadas) || 0,
-              pendentes: Number(estatisticasTransacoes.total_pendentes) || 0,
-              recusadas: Number(estatisticasTransacoes.total_recusadas) || 0,
-              valorTotal: Number(estatisticasTransacoes.valor_total_aprovado) || 0,
-              crescimento: crescimentoTransacoes
-            },
+            transacoes: estatisticasTransacoes,
             pedidos: {
-              total: Number(estatisticasPedidos.total_pedidos) || 0,
-              completos: Number(estatisticasPedidos.total_completos) || 0,
-              processando: Number(estatisticasPedidos.total_processando) || 0,
-              pendentes: Number(estatisticasPedidos.total_pendentes) || 0,
-              falhas: Number(estatisticasPedidos.total_falhas) || 0,
-              valorTotal: Number(estatisticasPedidos.valor_total) || 0,
-              crescimento: crescimentoPedidos
+              total: estatisticasPedidos.total_pedidos,
+              completos: estatisticasPedidos.total_completos,
+              processando: estatisticasPedidos.total_processando,
+              pendentes: estatisticasPedidos.total_pendentes,
+              falhas: estatisticasPedidos.total_falhas,
+              valorTotal: estatisticasPedidos.valor_total,
+              crescimento: estatisticasPedidos.crescimento
             },
             usuarios: estatisticasUsuarios
           },
@@ -293,8 +291,8 @@ export const dashboardResolvers = {
           atividadesRecentes
         };
       } catch (error) {
-        console.error('Erro ao obter dados do dashboard:', error);
-        throw new Error('Erro ao carregar dados do dashboard');
+        console.error('Erro ao buscar dados do dashboard:', error);
+        throw new Error('Erro ao buscar dados do dashboard');
       }
     }
   }
