@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:init": "node src/db/initDb.js",
+    "db:clean": "node scripts/executar_limpeza.js"
   },
   "dependencies": {
     "@apollo/client": "^3.13.7",
