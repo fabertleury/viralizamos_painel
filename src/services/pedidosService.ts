@@ -6,6 +6,28 @@ export const ordersPool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+// Verificar conexão com o banco de dados
+ordersPool.on('error', (err) => {
+  console.error('Erro inesperado na conexão com o pool PostgreSQL:', err);
+});
+
+// Função para testar conexão com o banco
+export async function testarConexaoDB() {
+  let client;
+  try {
+    client = await ordersPool.connect();
+    console.log('Conexão com o banco de dados estabelecida com sucesso.');
+    return true;
+  } catch (error) {
+    console.error('Erro ao conectar com o banco de dados:', error);
+    return false;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+}
+
 // Interface para pedidos
 export interface Pedido {
   id: string;
@@ -40,6 +62,10 @@ export async function buscarPedidos(
   limite = 10
 ): Promise<{ pedidos: Pedido[]; total: number }> {
   try {
+    // Verificar se a conexão está OK antes de executar
+    console.log(`Iniciando busca de pedidos. Filtros: ${JSON.stringify(filtros)}, Página: ${pagina}, Limite: ${limite}`);
+    console.log(`URL do banco de dados: ${process.env.ORDERS_DATABASE_URL ? 'Configurada' : 'Não configurada'}`);
+    
     const offset = (pagina - 1) * limite;
     
     let query = `
@@ -126,6 +152,11 @@ export async function buscarPedidos(
     };
   } catch (error) {
     console.error('Erro ao buscar pedidos:', error);
+    // Log detalhado do erro
+    if (error instanceof Error) {
+      console.error(`Mensagem de erro: ${error.message}`);
+      console.error(`Stack trace: ${error.stack}`);
+    }
     throw new Error('Erro ao buscar pedidos do banco de dados');
   }
 }
@@ -271,6 +302,9 @@ export async function obterPedidosPorPeriodo(dias: number = 7): Promise<any[]> {
 // Função para obter os principais provedores
 export async function obterProvedores(): Promise<any[]> {
   try {
+    console.log('Iniciando busca de provedores.');
+    console.log(`URL do banco de dados: ${process.env.ORDERS_DATABASE_URL ? 'Configurada' : 'Não configurada'}`);
+    
     const query = `
       SELECT 
         id, 
@@ -287,10 +321,16 @@ export async function obterProvedores(): Promise<any[]> {
     `;
     
     const result = await ordersPool.query(query);
+    console.log(`Provedores encontrados: ${result.rows.length}`);
     
     return result.rows;
   } catch (error) {
     console.error('Erro ao obter provedores:', error);
+    // Log detalhado do erro
+    if (error instanceof Error) {
+      console.error(`Mensagem de erro: ${error.message}`);
+      console.error(`Stack trace: ${error.stack}`);
+    }
     throw new Error('Erro ao obter provedores');
   }
 } 

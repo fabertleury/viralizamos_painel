@@ -1,5 +1,33 @@
 import { PrismaClient } from '@prisma/client';
 
+// Cliente Prisma para o banco de dados de pagamentos
+export const pagamentosPrisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  datasources: {
+    db: {
+      url: process.env.PAGAMENTOS_DATABASE_URL,
+    },
+  },
+});
+
+// Função auxiliar para executar queries no Prisma
+async function prismaQuery(model: string, operation: string, args?: any) {
+  // Substitui o nome do modelo para o formato que o Prisma espera
+  const modelName = model;
+  
+  console.log(`[PagamentosPrisma] Executando ${operation} em ${model} com args:`, args);
+  
+  try {
+    // @ts-ignore - Executa a operação no modelo
+    const result = await pagamentosPrisma[model][operation](args);
+    console.log(`[PagamentosPrisma] Resultado: ${operation} em ${model} retornou ${Array.isArray(result) ? result.length + ' itens' : 'objeto'}`);
+    return result;
+  } catch (error) {
+    console.error(`[PagamentosPrisma] Erro ao executar ${operation} em ${model}:`, error);
+    throw error;
+  }
+}
+
 // Define modelos específicos que existem no banco de pagamentos
 const models = {
   transaction: {
@@ -22,34 +50,6 @@ const models = {
     }
   }
 };
-
-// Cliente Prisma para o banco de dados de pagamentos
-export const pagamentosPrisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  datasources: {
-    db: {
-      url: process.env.PAGAMENTOS_DATABASE_URL,
-    },
-  },
-});
-
-// Função auxiliar para executar queries no Prisma
-async function prismaQuery(model: string, operation: string, args?: any) {
-  // Substitui o nome do modelo para o formato que o Prisma espera
-  const modelName = model.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-  
-  console.log(`[PagamentosPrisma] Executando ${operation} em ${model} com args:`, args);
-  
-  try {
-    // @ts-ignore - Executa a operação no modelo
-    const result = await pagamentosPrisma[modelName][operation](args);
-    console.log(`[PagamentosPrisma] Resultado: ${operation} em ${model} retornou ${Array.isArray(result) ? result.length + ' itens' : 'objeto'}`);
-    return result;
-  } catch (error) {
-    console.error(`[PagamentosPrisma] Erro ao executar ${operation} em ${model}:`, error);
-    throw error;
-  }
-}
 
 // Exporta os modelos para uso
 export { models as transaction };
