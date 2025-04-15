@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:init": "node src/db/initDb.js",
-    "db:clean": "node scripts/executar_limpeza.js"
+    "db:clean": "node scripts/executar_limpeza.js",
+    "db:check": "node scripts/verificar_tabelas.js"
   },
   "dependencies": {
     "@apollo/client": "^3.13.7",
@@ -23,6 +24,7 @@
     "bcryptjs": "^3.0.2",
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",
+    "dotenv": "^16.5.0",
     "framer-motion": "^10.16.16",
     "graphql": "^16.8.1",
     "jsonwebtoken": "^9.0.2",
