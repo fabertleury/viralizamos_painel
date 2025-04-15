@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useToast, Spinner } from '@chakra-ui/react';
 import { FiClock, FiCheck, FiRefreshCw, FiAlertTriangle, FiShoppingBag, FiBarChart2, FiDollarSign, FiUser, FiArrowLeft } from 'react-icons/fi';
@@ -45,17 +45,32 @@ const PedidoDetalhes: React.FC = () => {
   const toast = useToast();
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const { isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const cancelRef = React.useRef<HTMLButtonElement>(null);
+
+  // Carregar dados do pedido quando o componente for montado ou o ID mudar
+  useEffect(() => {
+    if (isAuthenticated && router.query.id) {
+      carregarPedido();
+    }
+  }, [router.query.id, isAuthenticated]);
 
   const carregarPedido = async () => {
     const { id } = router.query;
     if (!id) return;
     
     try {
-      const response = await axios.get(`/api/pedidos/${id}`);
+      setIsLoading(true);
+      
+      // Adiciona token de autenticação ao cabeçalho da requisição
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get(`/api/pedidos/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      console.log('Dados do pedido carregados:', response.data);
       setPedido(response.data);
     } catch (error) {
       console.error('Erro ao carregar pedido:', error);
@@ -76,7 +91,12 @@ const PedidoDetalhes: React.FC = () => {
     
     try {
       setIsProcessing(true);
-      const response = await axios.post(`/api/pedidos/${pedido.id}/reenviar`);
+      
+      // Adiciona token de autenticação ao cabeçalho da requisição
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.post(`/api/pedidos/${pedido.id}/reenviar`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       
       if (response.data.success) {
         toast({
@@ -87,6 +107,10 @@ const PedidoDetalhes: React.FC = () => {
           isClosable: true,
         });
         
+        // Fechar o diálogo de confirmação
+        onClose();
+        
+        // Recarregar os dados do pedido
         carregarPedido();
       } else {
         toast({
@@ -190,8 +214,50 @@ const PedidoDetalhes: React.FC = () => {
     );
   };
 
-  const verificarStatusPedido = () => {
-    // Implemente a lógica para verificar o status do pedido
+  const verificarStatusPedido = async () => {
+    if (!pedido) return;
+    
+    try {
+      setIsProcessing(true);
+      
+      // Adiciona token de autenticação ao cabeçalho da requisição
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get(`/api/pedidos/${pedido.id}/check-status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (response.data.success) {
+        toast({
+          title: 'Status verificado',
+          description: 'O status do pedido foi atualizado com sucesso.',
+          status: 'success',
+          duration: 5000,
+          isClosable: true,
+        });
+        
+        // Recarregar os dados do pedido
+        carregarPedido();
+      } else {
+        toast({
+          title: 'Falha ao verificar status',
+          description: response.data.message || 'Não foi possível verificar o status do pedido.',
+          status: 'warning',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao verificar status do pedido:', error);
+      toast({
+        title: 'Erro ao verificar status',
+        description: 'Ocorreu um erro ao tentar verificar o status do pedido.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const onOpen = () => {
