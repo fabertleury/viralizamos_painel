@@ -4,10 +4,12 @@ import { Pool } from 'pg';
 const isServerSide = typeof window === 'undefined';
 
 // Conexão com o banco de dados de orders
-export const ordersPool = isServerSide ? new Pool({
-  connectionString: process.env.ORDERS_DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-}) : null;
+export const ordersPool = isServerSide && process.env.NEXT_PHASE !== 'phase-production-build' 
+  ? new Pool({
+      connectionString: process.env.ORDERS_DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    })
+  : null;
 
 // Verificar conexão com o banco de dados
 if (ordersPool) {
@@ -35,6 +37,16 @@ export async function testarConexaoDB() {
     
     // Fazer uma query simples de teste
     await client.query('SELECT 1 AS test');
+    
+    // Verificar tabelas disponíveis
+    const tablesQuery = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+      ORDER BY table_name;
+    `);
+    
+    console.log('Tabelas disponíveis:', tablesQuery.rows.map(r => r.table_name).join(', '));
     
     console.log('Conexão com o banco de dados estabelecida com sucesso.');
     return true;
@@ -64,9 +76,6 @@ export interface Pedido {
   cliente_email: string;
   transacao_id?: string;
   provider_order_id?: string;
-  api_response?: any;
-  error_message?: string;
-  last_check?: Date;
 }
 
 // Função para buscar pedidos com filtros
@@ -97,33 +106,27 @@ export async function buscarPedidos(
     
     const offset = (pagina - 1) * limite;
     
+    // Consulta corrigida para a tabela "Order" do Prisma
     let query = `
       SELECT 
         o.id, 
-        o.created_at as data_criacao, 
+        o.created_at as data_criacao,
         o.provider_id as provedor_id,
         p.name as provedor_nome,
         o.service_id as produto_id,
-        s.name as produto_nome,
+        o.target_username as produto_nome,
         o.quantity as quantidade,
-        o.price as valor,
+        o.amount as valor,
         o.status,
         o.user_id as cliente_id,
-        u.name as cliente_nome,
-        u.email as cliente_email,
+        o.customer_name as cliente_nome,
+        o.customer_email as cliente_email,
         o.transaction_id as transacao_id,
-        o.provider_order_id,
-        o.api_response,
-        o.error_message,
-        o.last_check
+        o.external_order_id as provider_order_id
       FROM 
-        orders o
+        "Order" o
       LEFT JOIN 
-        providers p ON o.provider_id = p.id
-      LEFT JOIN 
-        services s ON o.service_id = s.id
-      LEFT JOIN 
-        users u ON o.user_id = u.id
+        "Provider" p ON o.provider_id = p.id
       WHERE 1=1
     `;
     
@@ -154,10 +157,10 @@ export async function buscarPedidos(
     if (filtros.termoBusca) {
       query += ` AND (
         o.id::text ILIKE $${paramCount} OR 
-        u.name ILIKE $${paramCount} OR 
-        u.email ILIKE $${paramCount} OR
-        s.name ILIKE $${paramCount} OR
-        o.provider_order_id ILIKE $${paramCount}
+        o.customer_name ILIKE $${paramCount} OR 
+        o.customer_email ILIKE $${paramCount} OR
+        o.target_username ILIKE $${paramCount} OR
+        o.external_order_id ILIKE $${paramCount}
       )`;
       queryParams.push(`%${filtros.termoBusca}%`);
       paramCount++;
@@ -173,7 +176,10 @@ export async function buscarPedidos(
     queryParams.push(limite);
     queryParams.push(offset);
     
+    console.log('Executando query final');
+    
     const result = await ordersPool.query(query, queryParams);
+    console.log(`Encontrados ${result.rows.length} pedidos`);
     
     return {
       pedidos: result.rows,
@@ -367,9 +373,9 @@ export async function obterProvedores(): Promise<any[]> {
         status,
         created_at as data_criacao
       FROM 
-        providers
+        "Provider"
       WHERE 
-        status = 'active'
+        status = true
       ORDER BY 
         name
     `;
