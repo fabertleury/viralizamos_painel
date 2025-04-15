@@ -1,47 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import axios, { AxiosError } from 'axios';
 
-// Dados mockados que já funcionam
-const transacoesMock = [
-  {
-    id: 'tx_67890',
-    data_criacao: '2023-08-07T15:25:00Z',
-    valor: 89900,
-    status: 'aprovado',
-    metodo_pagamento: 'credit_card',
-    cliente_id: 'usr_123',
-    cliente_nome: 'João Silva',
-    cliente_email: 'joao.silva@example.com',
-    produto_id: 'prod_456',
-    produto_nome: 'Instagram Followers (1000)',
-    order_id: 'ord_12345'
-  },
-  {
-    id: 'tx_67891',
-    data_criacao: '2023-08-07T14:45:00Z',
-    valor: 129900,
-    status: 'aprovado',
-    metodo_pagamento: 'pix',
-    cliente_id: 'usr_456',
-    cliente_nome: 'Maria Santos',
-    cliente_email: 'maria.santos@example.com',
-    produto_id: 'prod_789',
-    produto_nome: 'TikTok Likes (5000)',
-    order_id: 'ord_12346'
-  },
-  {
-    id: 'tx_67892',
-    data_criacao: '2023-08-07T13:10:00Z',
-    valor: 199900,
-    status: 'recusado',
-    metodo_pagamento: 'credit_card',
-    cliente_id: 'usr_789',
-    cliente_nome: 'Carlos Ferreira',
-    cliente_email: 'carlos.ferreira@example.com',
-    produto_id: 'prod_101',
-    produto_nome: 'YouTube Views (10000)',
-    order_id: 'ord_12347'
-  }
-];
+// Configuração da API de pagamentos - Importante: não usar NEXT_PUBLIC no servidor
+const pagamentosApiUrl = process.env.PAGAMENTOS_API_URL || process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api';
+const apiKey = process.env.PAGAMENTOS_API_KEY;
+
+// Log de configuração para debug
+console.log('[API:Transacoes:Config] URL da API:', pagamentosApiUrl);
+console.log('[API:Transacoes:Config] API Key definida:', !!apiKey);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -49,6 +15,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    console.log('[API:Transacoes] Iniciando busca de transações');
+    console.log(`[API:Transacoes] API URL: ${pagamentosApiUrl}`);
+    console.log(`[API:Transacoes] API Key presente: ${!!apiKey}`);
+    
     const { 
       status, 
       metodo, 
@@ -56,50 +26,113 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       pagina = '1', 
       limite = '10' 
     } = req.query;
-
-    // Filtrar transações
-    let transacoesFiltradas = [...transacoesMock];
+    
+    // Construir parâmetros para a API de pagamentos
+    const params: Record<string, any> = {
+      page: pagina,
+      limit: limite
+    };
     
     if (status && status !== 'todos') {
-      transacoesFiltradas = transacoesFiltradas.filter(
-        t => t.status.toLowerCase() === (status as string).toLowerCase()
-      );
+      params.status = status;
     }
     
     if (metodo && metodo !== 'todos') {
-      transacoesFiltradas = transacoesFiltradas.filter(
-        t => t.metodo_pagamento.toLowerCase() === (metodo as string).toLowerCase()
-      );
+      params.method = metodo;
     }
     
     if (termoBusca) {
-      const busca = (termoBusca as string).toLowerCase();
-      transacoesFiltradas = transacoesFiltradas.filter(t => 
-        t.id.toLowerCase().includes(busca) || 
-        t.cliente_nome.toLowerCase().includes(busca) || 
-        t.cliente_email.toLowerCase().includes(busca) ||
-        t.produto_nome.toLowerCase().includes(busca)
-      );
+      params.search = termoBusca;
     }
     
-    // Paginação
-    const total = transacoesFiltradas.length;
-    const paginaNum = parseInt(pagina as string);
-    const limiteNum = parseInt(limite as string);
-    const inicio = (paginaNum - 1) * limiteNum;
-    const fim = inicio + limiteNum;
+    console.log(`[API:Transacoes] Chamando endpoint: ${pagamentosApiUrl}/transactions/list`);
+    console.log(`[API:Transacoes] Parâmetros:`, JSON.stringify(params));
     
-    const transacoesPaginadas = transacoesFiltradas.slice(inicio, fim);
+    // Configuração dos headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    
+    // Adicionar API key se estiver disponível
+    if (apiKey) {
+      headers['Authorization'] = `ApiKey ${apiKey}`;
+    }
+    
+    console.log('[API:Transacoes] Headers:', JSON.stringify(headers, (_, v) => 
+      v === headers['Authorization'] ? '***MASKED***' : v
+    ));
+    
+    // Chamar a API de pagamentos
+    const response = await axios.get(`${pagamentosApiUrl}/transactions/list`, {
+      params,
+      headers
+    });
+    
+    console.log(`[API:Transacoes] Resposta recebida: ${response.status}`);
+    console.log(`[API:Transacoes] Total de transações: ${response.data.total || 0}`);
+    
+    // Mapear a resposta para o formato esperado pelo frontend
+    const transacoes = (response.data.transactions || []).map((t: any) => ({
+      id: t.id,
+      data_criacao: t.created_at,
+      valor: t.amount,
+      status: t.status,
+      metodo_pagamento: t.method,
+      cliente_id: t.payment_request?.customer_id || '',
+      cliente_nome: t.payment_request?.customer_name || '',
+      cliente_email: t.payment_request?.customer_email || '',
+      produto_id: t.payment_request?.service_id || '',
+      produto_nome: t.payment_request?.service_name || '',
+      order_id: t.external_id || ''
+    }));
     
     res.status(200).json({
-      transacoes: transacoesPaginadas,
-      total
+      transacoes,
+      total: response.data.total || 0,
+      apiUrl: pagamentosApiUrl, // Adicionar URL da API na resposta para debug
+      debug: {
+        env: process.env.NODE_ENV,
+        hasApiKey: !!apiKey
+      }
     });
   } catch (error) {
-    console.error('Erro ao processar transações:', error);
-    res.status(200).json({ 
-      transacoes: transacoesMock.slice(0, 3),
-      total: 3 
-    });
+    console.error('[API:Transacoes] Erro ao processar transações:', error);
+    
+    // Log detalhado do erro para depuração
+    const err = error as Error | AxiosError;
+    
+    if (axios.isAxiosError(err)) {
+      if (err.response) {
+        console.error('[API:Transacoes] Resposta de erro:', {
+          status: err.response.status,
+          data: err.response.data,
+          headers: err.response.headers
+        });
+      } else if (err.request) {
+        console.error('[API:Transacoes] Erro na requisição (sem resposta):', err.request);
+      } else {
+        console.error('[API:Transacoes] Erro de configuração Axios:', err.message);
+      }
+      
+      // Retornar mensagem adequada para o cliente
+      res.status(500).json({ 
+        error: 'Erro ao buscar transações',
+        message: err.message,
+        url: pagamentosApiUrl,
+        hasApiKey: !!apiKey,
+        code: err.code,
+        transacoes: [],
+        total: 0
+      });
+    } else {
+      console.error('[API:Transacoes] Erro genérico:', (err as Error).message);
+      
+      res.status(500).json({ 
+        error: 'Erro ao buscar transações',
+        message: (err as Error).message,
+        transacoes: [],
+        total: 0
+      });
+    }
   }
 } 

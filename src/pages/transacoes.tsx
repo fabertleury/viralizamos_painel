@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -47,6 +47,10 @@ export default function Transacoes() {
   const router = useRouter();
   const toast = useToast();
   
+  // Obter as cores para uso no componente - mover para fora de qualquer condicional
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const headerBgColor = useColorModeValue('gray.50', 'gray.700');
+  
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [totalTransacoes, setTotalTransacoes] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,12 +88,36 @@ export default function Transacoes() {
         params.termoBusca = termoBusca;
       }
       
+      // Adicionar logs para diagnóstico
+      console.log('[Transacoes] Iniciando busca de transações');
+      console.log('[Transacoes] Parâmetros:', params);
+      
       const response = await axios.get('/api/transacoes', { params });
       
-      setTransacoes(response.data.transacoes);
-      setTotalTransacoes(response.data.total);
+      console.log('[Transacoes] Resposta recebida:', response);
+      console.log('[Transacoes] Total de transações:', response.data.total);
+      console.log('[Transacoes] Dados retornados:', response.data);
+      
+      if (response.data.transacoes && Array.isArray(response.data.transacoes)) {
+        console.log('[Transacoes] Número de transações recebidas:', response.data.transacoes.length);
+        setTransacoes(response.data.transacoes);
+        setTotalTransacoes(response.data.total);
+      } else {
+        console.error('[Transacoes] Formato de dados inválido:', response.data);
+        setTransacoes([]);
+        setTotalTransacoes(0);
+        toast({
+          title: 'Formato de dados inválido',
+          description: 'O servidor retornou dados em um formato inesperado.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
     } catch (error) {
-      console.error('Erro ao carregar transações:', error);
+      console.error('[Transacoes] Erro ao carregar transações:', error);
+      setTransacoes([]);
+      setTotalTransacoes(0);
       toast({
         title: 'Erro ao carregar transações',
         description: 'Ocorreu um erro ao buscar as transações. Tente novamente mais tarde.',
@@ -273,12 +301,12 @@ export default function Transacoes() {
         
         <Box
           overflowX="auto"
-          bg={useColorModeValue('white', 'gray.800')}
+          bg={bgColor}
           shadow="md"
           rounded="lg"
         >
           <Table variant="simple">
-            <Thead bg={useColorModeValue('gray.50', 'gray.700')}>
+            <Thead bg={headerBgColor}>
               <Tr>
                 <Th>ID</Th>
                 <Th>Data</Th>
