@@ -1,21 +1,41 @@
 import { Pool } from 'pg';
 
+// Impede erros durante o processo de build
+const isServerSide = typeof window === 'undefined';
+
 // Conexão com o banco de dados de orders
-export const ordersPool = new Pool({
+export const ordersPool = isServerSide ? new Pool({
   connectionString: process.env.ORDERS_DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+}) : null;
 
 // Verificar conexão com o banco de dados
-ordersPool.on('error', (err) => {
-  console.error('Erro inesperado na conexão com o pool PostgreSQL:', err);
-});
+if (ordersPool) {
+  ordersPool.on('error', (err) => {
+    console.error('Erro inesperado na conexão com o pool PostgreSQL:', err);
+  });
+}
 
 // Função para testar conexão com o banco
 export async function testarConexaoDB() {
+  // Se não estiver no servidor ou em modo de build, retorna true
+  if (!isServerSide || process.env.NEXT_PHASE === 'phase-production-build') {
+    console.log('Pulando verificação de conexão durante build ou no cliente');
+    return true;
+  }
+
+  if (!ordersPool) {
+    console.error('Pool de conexão não foi inicializado');
+    return false;
+  }
+
   let client;
   try {
     client = await ordersPool.connect();
+    
+    // Fazer uma query simples de teste
+    await client.query('SELECT 1 AS test');
+    
     console.log('Conexão com o banco de dados estabelecida com sucesso.');
     return true;
   } catch (error) {
@@ -61,10 +81,19 @@ export async function buscarPedidos(
   pagina = 1,
   limite = 10
 ): Promise<{ pedidos: Pedido[]; total: number }> {
+  // Se estiver em build, retornar dados vazios
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    console.log('Pulando busca de pedidos durante o build');
+    return { pedidos: [], total: 0 };
+  }
+
   try {
     // Verificar se a conexão está OK antes de executar
     console.log(`Iniciando busca de pedidos. Filtros: ${JSON.stringify(filtros)}, Página: ${pagina}, Limite: ${limite}`);
-    console.log(`URL do banco de dados: ${process.env.ORDERS_DATABASE_URL ? 'Configurada' : 'Não configurada'}`);
+    
+    if (!ordersPool) {
+      throw new Error('Pool de conexão não inicializado');
+    }
     
     const offset = (pagina - 1) * limite;
     
@@ -163,6 +192,10 @@ export async function buscarPedidos(
 
 // Função para buscar um pedido específico
 export async function buscarPedidoPorId(id: string): Promise<Pedido | null> {
+  if (!ordersPool) {
+    throw new Error('Pool de conexão não inicializado');
+  }
+  
   try {
     const query = `
       SELECT 
@@ -210,6 +243,10 @@ export async function buscarPedidoPorId(id: string): Promise<Pedido | null> {
 
 // Função para reenviar um pedido
 export async function reenviarPedido(id: string): Promise<boolean> {
+  if (!ordersPool) {
+    throw new Error('Pool de conexão não inicializado');
+  }
+  
   try {
     // Atualizando o status do pedido para "processando" e marcando para reprocessamento
     const query = `
@@ -246,6 +283,10 @@ export async function reenviarPedido(id: string): Promise<boolean> {
 
 // Função para obter estatísticas de pedidos
 export async function obterEstatisticasPedidos(): Promise<any> {
+  if (!ordersPool) {
+    throw new Error('Pool de conexão não inicializado');
+  }
+  
   try {
     const query = `
       SELECT 
@@ -272,6 +313,10 @@ export async function obterEstatisticasPedidos(): Promise<any> {
 
 // Função para obter pedidos por período (para gráficos)
 export async function obterPedidosPorPeriodo(dias: number = 7): Promise<any[]> {
+  if (!ordersPool) {
+    throw new Error('Pool de conexão não inicializado');
+  }
+  
   try {
     const query = `
       SELECT 
@@ -301,9 +346,18 @@ export async function obterPedidosPorPeriodo(dias: number = 7): Promise<any[]> {
 
 // Função para obter os principais provedores
 export async function obterProvedores(): Promise<any[]> {
+  // Se estiver em build, retornar dados vazios
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    console.log('Pulando busca de provedores durante o build');
+    return [];
+  }
+
   try {
     console.log('Iniciando busca de provedores.');
-    console.log(`URL do banco de dados: ${process.env.ORDERS_DATABASE_URL ? 'Configurada' : 'Não configurada'}`);
+    
+    if (!ordersPool) {
+      throw new Error('Pool de conexão não inicializado');
+    }
     
     const query = `
       SELECT 

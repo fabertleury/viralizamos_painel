@@ -6,6 +6,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ message: 'Método não permitido' });
   }
 
+  // Verifica se está em fase de build e retorna dados vazios se estiver
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    console.log('API /pedidos - Pulando execução durante build');
+    return res.status(200).json({ pedidos: [], total: 0 });
+  }
+
   try {
     // Verificar se a URL do banco de dados está configurada
     if (!process.env.ORDERS_DATABASE_URL) {
