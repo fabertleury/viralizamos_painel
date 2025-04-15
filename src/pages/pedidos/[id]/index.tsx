@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { useToast, Spinner } from '@chakra-ui/react';
 import { FiClock, FiCheck, FiRefreshCw, FiAlertTriangle, FiShoppingBag, FiBarChart2, FiDollarSign, FiUser, FiArrowLeft } from 'react-icons/fi';
-import { Badge, Icon, Flex, Container, Button, Box, Heading, Text, HStack, Grid, GridItem, Card, CardHeader, CardBody, Stat, StatLabel, StatNumber, StatHelpText, Divider, Table, Thead, Tr, Td, VStack, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter } from '@chakra-ui/react';
+import { Badge, Icon, Flex, Container, Button, Box, Heading, Text, HStack, Grid, GridItem, Card, CardHeader, CardBody, Stat, StatLabel, StatNumber, StatHelpText, Divider, Table, Thead, Tbody, Th, Tr, Td, VStack, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter } from '@chakra-ui/react';
 import axios from 'axios';
 import Link from 'next/link';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -13,7 +13,31 @@ interface Pedido {
   status: string;
   amount: number;
   created_at: Date;
-  // Adicione outras propriedades conforme necessário
+  produto_nome?: string;
+  produto_descricao?: string;
+  provedor_nome?: string;
+  provider_order_id?: string;
+  quantidade?: number;
+  transacao_id?: string;
+  transacao_detalhes?: {
+    status: string;
+    metodo_pagamento?: string;
+    data_pagamento?: Date;
+    parcelas?: number;
+    valor_parcela?: number;
+  };
+  error_message?: string;
+  api_response?: any;
+  historico?: Array<{
+    data: Date;
+    status: string;
+    descricao: string;
+  }>;
+  cliente_nome?: string;
+  cliente_email?: string;
+  cliente_telefone?: string;
+  cliente_id?: string;
+  metadados?: Record<string, any>;
 }
 
 const PedidoDetalhes: React.FC = () => {

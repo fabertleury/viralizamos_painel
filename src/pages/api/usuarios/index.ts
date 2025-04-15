@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { buscarUsuarios, testarConexaoDB } from '../../../services/usuariosService';
+import { buscarUsuariosDetalhados, testarConexaoDB } from '../../../services/usuariosService';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -68,9 +68,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       filtros.termoBusca = termoBusca;
     }
     
-    const resultado = await buscarUsuarios(
-      filtros, 
-      parseInt(pagina as string), 
+    const resultado = await buscarUsuariosDetalhados(
+      filtros,
+      parseInt(pagina as string),
       parseInt(limite as string)
     );
     

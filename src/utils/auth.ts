@@ -37,13 +37,13 @@ export async function verifyJwtToken(token: string): Promise<TokenPayload | null
  * @returns Token JWT gerado
  */
 export function generateJwtToken(payload: Omit<TokenPayload, 'iat' | 'exp'>, expiresIn = '7d'): string {
-  const jwtSecret = process.env.JWT_SECRET;
+  const jwtSecret = process.env.JWT_SECRET || '';
   
   if (!jwtSecret) {
     throw new Error('JWT_SECRET não definido');
   }
   
-  return sign(payload, jwtSecret, { expiresIn });
+  return sign(payload, jwtSecret, { expiresIn: expiresIn });
 }
 
 /**

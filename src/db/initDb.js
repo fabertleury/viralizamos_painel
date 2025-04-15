@@ -1,57 +1,39 @@
-require('dotenv').config();
-const { Pool } = require('pg');
+const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
-// Configuração da conexão com o banco de dados
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:shMwuukfHKLTdgPkDOUQmYuqdFGOBzPA@metro.proxy.rlwy.net:40176/railway',
+// Configuração do cliente PostgreSQL com a URL do banco de dados do .env
+const client = new Client({
+  connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-async function initDatabase() {
+async function inicializarBancoDados() {
   try {
-    console.log('Conectando ao banco de dados...');
-    const client = await pool.connect();
+    console.log('Conectando ao banco de dados PostgreSQL...');
+    await client.connect();
     
-    // Ler o arquivo schema.sql
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const sqlSchema = fs.readFileSync(schemaPath, 'utf8');
+    // Lê o arquivo SQL de schema
+    const sqlPath = path.join(__dirname, 'schema.sql');
+    const sqlScript = fs.readFileSync(sqlPath, 'utf8');
     
-    console.log('Executando script de inicialização do banco de dados...');
-    await client.query(sqlSchema);
+    console.log('Executando script de inicialização...');
+    await client.query(sqlScript);
     
-    console.log('Banco de dados inicializado com sucesso!');
+    console.log('✅ Banco de dados inicializado com sucesso!');
+    console.log('As tabelas essenciais foram criadas.');
     
-    // Verificar se as tabelas foram criadas
-    const result = await client.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-      ORDER BY table_name;
-    `);
-    
-    console.log('Tabelas criadas:');
-    result.rows.forEach(row => {
-      console.log(`- ${row.table_name}`);
-    });
-    
-    // Verificar o usuário administrador
-    const userResult = await client.query('SELECT id, nome, email, tipo FROM usuarios WHERE tipo = $1', ['admin']);
-    console.log('\nUsuários administradores:');
-    userResult.rows.forEach(user => {
-      console.log(`- ID: ${user.id}, Nome: ${user.nome}, Email: ${user.email}`);
-    });
-    
-    client.release();
   } catch (error) {
-    console.error('Erro ao inicializar o banco de dados:', error);
-    process.exit(1);
+    console.error('❌ Erro ao inicializar banco de dados:', error);
   } finally {
-    // Fechar a conexão com o pool
-    await pool.end();
+    await client.end();
   }
 }
 
-// Executar a inicialização
-initDatabase(); 
+// Executar a inicialização se este arquivo for executado diretamente
+if (require.main === module) {
+  inicializarBancoDados();
+}
+
+module.exports = { inicializarBancoDados }; 
