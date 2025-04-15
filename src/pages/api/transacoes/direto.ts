@@ -1,25 +1,52 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 
+// Impede erros durante o processo de build
+const isServerSide = typeof window === 'undefined';
+
 // Conexão direta com o banco de dados para depuração
-const pagamentosPool = new Pool({
-  connectionString: process.env.PAGAMENTOS_DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+const pagamentosPool = isServerSide && process.env.NEXT_PHASE !== 'phase-production-build' 
+  ? new Pool({
+      connectionString: process.env.PAGAMENTOS_DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    })
+  : null;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Método não permitido' });
   }
 
+  // Verifica se está em fase de build e retorna dados simulados
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return res.status(200).json({
+      conexao: true,
+      tables: ['transaction', 'payment_request'],
+      db_url: 'simulado-durante-build',
+      total_transactions: 0,
+      schema: { transaction_columns: [] },
+      transacoes: []
+    });
+  }
+
   try {
     console.log('[API:TransacoesDireto] Iniciando depuração do banco de dados');
+    
+    if (!pagamentosPool) {
+      throw new Error('Pool de conexão não inicializado');
+    }
+
     console.log(`[API:TransacoesDireto] URL DB: ${process.env.PAGAMENTOS_DATABASE_URL?.substring(0, 20)}...`);
     
     // Testar conexão com o banco
-    const clientInfo = await pagamentosPool.connect();
-    console.log(`[API:TransacoesDireto] Conexão estabelecida: ${clientInfo.database}@${clientInfo.host}`);
-    clientInfo.release();
+    const client = await pagamentosPool.connect();
+    
+    // Verificar conexão sem acessar propriedades problemáticas
+    const testQuery = await client.query('SELECT current_database() as db, current_setting(\'server_version\') as version');
+    const dbInfo = testQuery.rows[0];
+    console.log(`[API:TransacoesDireto] Conexão estabelecida: ${dbInfo.db} (PostgreSQL ${dbInfo.version})`);
+    
+    client.release();
     
     // Verificar as tabelas existentes
     const tablesQuery = await pagamentosPool.query(`
@@ -30,7 +57,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `);
     
     const tables = tablesQuery.rows.map(row => row.table_name);
-    console.log(`[API:TransacoesDireto] Tabelas encontradas: ${tables.join(', ')}`);
     
     // Buscar as 10 transações mais recentes diretamente
     const transacoesQuery = await pagamentosPool.query(`
