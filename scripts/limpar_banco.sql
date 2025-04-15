@@ -4,7 +4,26 @@
 -- Desativar verificação de chaves estrangeiras durante a limpeza
 SET session_replication_role = 'replica';
 
--- Listar e remover tabelas que não fazem parte do novo esquema simplificado
+-- Remover tabelas existentes identificadas no banco de dados
+DROP TABLE IF EXISTS "User" CASCADE;
+DROP TABLE IF EXISTS "_prisma_migrations" CASCADE;
+DROP TABLE IF EXISTS "categories" CASCADE;
+DROP TABLE IF EXISTS "order_logs" CASCADE;
+DROP TABLE IF EXISTS "orders" CASCADE;
+DROP TABLE IF EXISTS "payment_requests" CASCADE;
+DROP TABLE IF EXISTS "providers" CASCADE;
+DROP TABLE IF EXISTS "services" CASCADE;
+DROP TABLE IF EXISTS "socials" CASCADE;
+DROP TABLE IF EXISTS "subcategories" CASCADE;
+DROP TABLE IF EXISTS "transactions" CASCADE;
+
+-- Remover tabelas do nosso esquema para garantir recriação limpa
+DROP TABLE IF EXISTS "usuariospermissoes" CASCADE;
+DROP TABLE IF EXISTS "permissoes" CASCADE;
+DROP TABLE IF EXISTS "configuracoessistema" CASCADE;
+DROP TABLE IF EXISTS "usuarios" CASCADE;
+
+-- Remoção de outras tabelas que podem existir
 DROP TABLE IF EXISTS usuarioslogacessos CASCADE;
 DROP TABLE IF EXISTS relatorios CASCADE;
 DROP TABLE IF EXISTS categorias CASCADE;
@@ -26,8 +45,8 @@ DROP TABLE IF EXISTS upload_arquivos CASCADE;
 -- Reativar verificação de chaves estrangeiras
 SET session_replication_role = 'origin';
 
--- Verificar e criar as tabelas essenciais se não existirem
-CREATE TABLE IF NOT EXISTS usuarios (
+-- Criar tabelas do nosso esquema simplificado
+CREATE TABLE usuarios (
   id SERIAL PRIMARY KEY,
   nome VARCHAR(100) NOT NULL,
   email VARCHAR(100) NOT NULL UNIQUE,
@@ -41,21 +60,21 @@ CREATE TABLE IF NOT EXISTS usuarios (
   metadata JSONB -- Para armazenar informações extras como preferências, estatísticas etc.
 );
 
-CREATE TABLE IF NOT EXISTS permissoes (
+CREATE TABLE permissoes (
   id SERIAL PRIMARY KEY,
   nome VARCHAR(50) NOT NULL UNIQUE,
   descricao VARCHAR(255),
   codigo VARCHAR(50) NOT NULL UNIQUE
 );
 
-CREATE TABLE IF NOT EXISTS usuariospermissoes (
+CREATE TABLE usuariospermissoes (
   id SERIAL PRIMARY KEY,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   permissao_id INTEGER NOT NULL REFERENCES permissoes(id) ON DELETE CASCADE,
   UNIQUE(usuario_id, permissao_id)
 );
 
-CREATE TABLE IF NOT EXISTS configuracoessistema (
+CREATE TABLE configuracoessistema (
   id SERIAL PRIMARY KEY,
   chave VARCHAR(100) NOT NULL UNIQUE,
   valor TEXT,
@@ -64,45 +83,28 @@ CREATE TABLE IF NOT EXISTS configuracoessistema (
   descricao TEXT
 );
 
--- Verificar se há o usuário administrador, e criar se não existir
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE email = 'admin@viralizamos.com') THEN
-        INSERT INTO usuarios (nome, email, senha, role, ativo)
-        VALUES ('Administrador', 'admin@viralizamos.com', '$2a$10$JlY9OOWVVD6c3J7.SOE0Z.o9RSqj6Gjh9GRO6u93nFIbRQqVE1U4i', 'admin', true);
-    END IF;
-END $$;
+-- Inserir usuário administrador
+INSERT INTO usuarios (nome, email, senha, role, ativo)
+VALUES ('Administrador', 'admin@viralizamos.com', '$2a$10$JlY9OOWVVD6c3J7.SOE0Z.o9RSqj6Gjh9GRO6u93nFIbRQqVE1U4i', 'admin', true);
 
--- Verificar e inserir permissões básicas se não existirem
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM permissoes LIMIT 1) THEN
-        INSERT INTO permissoes (nome, descricao, codigo) VALUES
-        ('Visualizar Usuários', 'Permite visualizar a lista de usuários', 'ver_usuarios'),
-        ('Editar Usuários', 'Permite criar e editar usuários', 'editar_usuarios'),
-        ('Excluir Usuários', 'Permite excluir usuários', 'excluir_usuarios'),
-        ('Visualizar Pedidos', 'Permite visualizar a lista de pedidos', 'ver_pedidos'),
-        ('Editar Pedidos', 'Permite editar status de pedidos', 'editar_pedidos'),
-        ('Visualizar Transações', 'Permite visualizar transações financeiras', 'ver_transacoes'),
-        ('Administração Completa', 'Acesso total ao sistema', 'admin_total');
-        
-        -- Atribuir todas as permissões ao admin (assumindo que o ID do admin é 1)
-        INSERT INTO usuariospermissoes (usuario_id, permissao_id)
-        SELECT 1, id FROM permissoes WHERE NOT EXISTS (
-            SELECT 1 FROM usuariospermissoes WHERE usuario_id = 1
-        );
-    END IF;
-END $$;
+-- Inserir permissões básicas
+INSERT INTO permissoes (nome, descricao, codigo) VALUES
+('Visualizar Usuários', 'Permite visualizar a lista de usuários', 'ver_usuarios'),
+('Editar Usuários', 'Permite criar e editar usuários', 'editar_usuarios'),
+('Excluir Usuários', 'Permite excluir usuários', 'excluir_usuarios'),
+('Visualizar Pedidos', 'Permite visualizar a lista de pedidos', 'ver_pedidos'),
+('Editar Pedidos', 'Permite editar status de pedidos', 'editar_pedidos'),
+('Visualizar Transações', 'Permite visualizar transações financeiras', 'ver_transacoes'),
+('Administração Completa', 'Acesso total ao sistema', 'admin_total');
 
--- Verificar e inserir configurações iniciais do sistema se não existirem
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM configuracoessistema LIMIT 1) THEN
-        INSERT INTO configuracoessistema (chave, valor, tipo, grupo, descricao) VALUES
-        ('site_titulo', 'Viralizamos - Painel Administrativo', 'string', 'geral', 'Título do site'),
-        ('empresa_nome', 'Viralizamos', 'string', 'empresa', 'Nome da empresa'),
-        ('empresa_email', 'contato@viralizamos.com', 'string', 'empresa', 'Email de contato'),
-        ('api_pagamentos_url', 'https://pagamentos.viralizamos.com/api', 'string', 'integracao', 'URL da API de pagamentos'),
-        ('jwt_secret', '6bVERz8A5P4drqmYjN2ZxK$Fw9sXhC7uJtH3GeQpT!vLWkS#D@', 'string', 'seguranca', 'Chave secreta para JWT');
-    END IF;
-END $$; 
+-- Atribuir todas as permissões ao admin
+INSERT INTO usuariospermissoes (usuario_id, permissao_id)
+SELECT 1, id FROM permissoes;
+
+-- Inserir configurações iniciais do sistema
+INSERT INTO configuracoessistema (chave, valor, tipo, grupo, descricao) VALUES
+('site_titulo', 'Viralizamos - Painel Administrativo', 'string', 'geral', 'Título do site'),
+('empresa_nome', 'Viralizamos', 'string', 'empresa', 'Nome da empresa'),
+('empresa_email', 'contato@viralizamos.com', 'string', 'empresa', 'Email de contato'),
+('api_pagamentos_url', 'https://pagamentos.viralizamos.com/api', 'string', 'integracao', 'URL da API de pagamentos'),
+('jwt_secret', '6bVERz8A5P4drqmYjN2ZxK$Fw9sXhC7uJtH3GeQpT!vLWkS#D@', 'string', 'seguranca', 'Chave secreta para JWT'); 
