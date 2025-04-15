@@ -1,6 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import axios from 'axios';
 
-// Dados mockados de transações
+// URL base do microserviço de pagamentos (deve ser configurado no arquivo .env)
+// Configurar para usar IPv4 explicitamente
+const PAYMENTS_API_URL = (process.env.PAYMENTS_API_URL || 'http://127.0.0.1:3001/api').replace('localhost', '127.0.0.1');
+
+console.log(`[API:Transacoes] URL configurada do microserviço: ${PAYMENTS_API_URL}`);
+
+// Dados mockados para fallback em caso de erro
 const transacoesMock = [
   {
     id: 'tx_67890',
@@ -40,97 +47,6 @@ const transacoesMock = [
     produto_id: 'prod_101',
     produto_nome: 'YouTube Views (10000)',
     order_id: 'ord_12347'
-  },
-  {
-    id: 'tx_67893',
-    data_criacao: '2023-08-07T12:30:00Z',
-    valor: 49900,
-    status: 'pendente',
-    metodo_pagamento: 'boleto',
-    cliente_id: 'usr_101',
-    cliente_nome: 'Ana Oliveira',
-    cliente_email: 'ana.oliveira@example.com',
-    produto_id: 'prod_202',
-    produto_nome: 'Facebook Likes (500)',
-    order_id: 'ord_12348'
-  },
-  {
-    id: 'tx_67894',
-    data_criacao: '2023-08-06T18:15:00Z',
-    valor: 299900,
-    status: 'aprovado',
-    metodo_pagamento: 'credit_card',
-    cliente_id: 'usr_202',
-    cliente_nome: 'Roberto Almeida',
-    cliente_email: 'roberto.almeida@example.com',
-    produto_id: 'prod_303',
-    produto_nome: 'Instagram Followers (5000)',
-    order_id: 'ord_12349'
-  },
-  {
-    id: 'tx_67895',
-    data_criacao: '2023-08-06T16:40:00Z',
-    valor: 79900,
-    status: 'aprovado',
-    metodo_pagamento: 'pix',
-    cliente_id: 'usr_303',
-    cliente_nome: 'Fernanda Lima',
-    cliente_email: 'fernanda.lima@example.com',
-    produto_id: 'prod_404',
-    produto_nome: 'Twitter Followers (1000)',
-    order_id: 'ord_12350'
-  },
-  {
-    id: 'tx_67896',
-    data_criacao: '2023-08-06T15:20:00Z',
-    valor: 59900,
-    status: 'estornado',
-    metodo_pagamento: 'credit_card',
-    cliente_id: 'usr_404',
-    cliente_nome: 'Lucas Costa',
-    cliente_email: 'lucas.costa@example.com',
-    produto_id: 'prod_505',
-    produto_nome: 'TikTok Views (1000)',
-    order_id: 'ord_12351'
-  },
-  {
-    id: 'tx_67897',
-    data_criacao: '2023-08-06T14:10:00Z',
-    valor: 149900,
-    status: 'aprovado',
-    metodo_pagamento: 'credit_card',
-    cliente_id: 'usr_505',
-    cliente_nome: 'Juliana Mendes',
-    cliente_email: 'juliana.mendes@example.com',
-    produto_id: 'prod_606',
-    produto_nome: 'Instagram Reels Views (10000)',
-    order_id: 'ord_12352'
-  },
-  {
-    id: 'tx_67898',
-    data_criacao: '2023-08-06T12:45:00Z',
-    valor: 39900,
-    status: 'aprovado',
-    metodo_pagamento: 'pix',
-    cliente_id: 'usr_606',
-    cliente_nome: 'Pedro Santos',
-    cliente_email: 'pedro.santos@example.com',
-    produto_id: 'prod_707',
-    produto_nome: 'Facebook Comments (100)',
-    order_id: 'ord_12353'
-  },
-  {
-    id: 'tx_67899',
-    data_criacao: '2023-08-06T11:30:00Z',
-    valor: 249900,
-    status: 'em_analise',
-    metodo_pagamento: 'credit_card',
-    cliente_id: 'usr_707',
-    cliente_nome: 'Camila Rocha',
-    cliente_email: 'camila.rocha@example.com',
-    produto_id: 'prod_808',
-    produto_nome: 'YouTube Subscribers (500)',
-    order_id: 'ord_12354'
   }
 ];
 
@@ -148,48 +64,127 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       limite = '10' 
     } = req.query;
 
-    let transacoesFiltradas = [...transacoesMock];
+    // Consultar API do microserviço de pagamentos
+    console.log(`[API:Transacoes] Consultando transações: ${PAYMENTS_API_URL}/transactions/list com parâmetros: pagina=${pagina}, limite=${limite}, status=${status}, metodo=${metodo}, termoBusca=${termoBusca}`);
     
-    // Aplicar filtros
-    if (status && status !== 'todos') {
-      transacoesFiltradas = transacoesFiltradas.filter(
-        t => t.status.toLowerCase() === (status as string).toLowerCase()
-      );
+    let transacoes;
+    let total;
+    let origem = 'api';
+    
+    try {
+      // Verificar se o serviço está ativo
+      console.log(`[API:Transacoes] Tentando conexão com ${PAYMENTS_API_URL}/health...`);
+      try {
+        const healthCheck = await axios.get(`${PAYMENTS_API_URL}/health`, { timeout: 2000 });
+        console.log(`[API:Transacoes] Serviço de pagamentos online: ${JSON.stringify(healthCheck.data)}`);
+      } catch (healthError) {
+        console.error(`[API:Transacoes] Erro na verificação de saúde: ${healthError}`);
+      }
+      
+      const response = await axios.get(`${PAYMENTS_API_URL}/transactions/list`, {
+        params: {
+          page: pagina,
+          limit: limite,
+          status: status,
+          method: metodo,
+          search: termoBusca
+        },
+        timeout: 5000, // 5 segundos de timeout
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'ViralizamosPainelAdmin/1.0',
+        }
+      });
+
+      if (response.status === 200) {
+        const data = response.data;
+        console.log(`[API:Transacoes] Resposta recebida: ${JSON.stringify(data).substring(0, 200)}...`);
+        
+        // Mapear os dados para o formato esperado pelo frontend
+        transacoes = data.transactions.map((transaction: any) => ({
+          id: transaction.id,
+          data_criacao: transaction.created_at,
+          valor: transaction.amount,
+          status: transaction.status,
+          metodo_pagamento: transaction.method,
+          cliente_id: transaction.payment_request?.customer_id || 'N/A',
+          cliente_nome: transaction.payment_request?.customer_name || 'N/A',
+          cliente_email: transaction.payment_request?.customer_email || 'N/A',
+          produto_id: transaction.payment_request?.product_id || 'N/A',
+          produto_nome: transaction.payment_request?.service_name || 'N/A',
+          order_id: transaction.payment_request?.order_id || 'N/A'
+        }));
+        
+        total = data.total || transacoes.length;
+        console.log(`[API:Transacoes] Dados reais obtidos: ${transacoes.length} transações`);
+      } else {
+        throw new Error(`Resposta inválida: ${response.status}`);
+      }
+    } catch (apiError: any) {
+      console.error(`[API:Transacoes] Erro ao conectar com API de pagamentos:`, apiError);
+      
+      if (apiError.code === 'ECONNREFUSED') {
+        console.log(`[API:Transacoes] Conexão recusada na porta ${apiError.port}. Verifique se o serviço está rodando.`);
+      }
+      
+      console.log('[API:Transacoes] Usando dados mockados como fallback devido a erro na API');
+      
+      // Fallback para dados mockados em caso de erro na API
+      let transacoesFiltradas = [...transacoesMock];
+      
+      // Aplicar filtros nos dados mockados
+      if (status && status !== 'todos') {
+        transacoesFiltradas = transacoesFiltradas.filter(
+          t => t.status.toLowerCase() === (status as string).toLowerCase()
+        );
+      }
+      
+      if (metodo && metodo !== 'todos') {
+        transacoesFiltradas = transacoesFiltradas.filter(
+          t => t.metodo_pagamento.toLowerCase() === (metodo as string).toLowerCase()
+        );
+      }
+      
+      if (termoBusca) {
+        const busca = (termoBusca as string).toLowerCase();
+        transacoesFiltradas = transacoesFiltradas.filter(t => 
+          t.id.toLowerCase().includes(busca) || 
+          t.cliente_nome.toLowerCase().includes(busca) || 
+          t.cliente_email.toLowerCase().includes(busca) ||
+          t.produto_nome.toLowerCase().includes(busca)
+        );
+      }
+      
+      // Total de resultados após a filtragem
+      total = transacoesFiltradas.length;
+      
+      // Paginação
+      const paginaNum = parseInt(pagina as string);
+      const limiteNum = parseInt(limite as string);
+      const inicio = (paginaNum - 1) * limiteNum;
+      const fim = inicio + limiteNum;
+      
+      transacoes = transacoesFiltradas.slice(inicio, fim);
+      origem = 'mock';
+      
+      console.log(`[API:Transacoes] Usando ${transacoes.length} transações mockadas (de ${total} total)`);
     }
-    
-    if (metodo && metodo !== 'todos') {
-      transacoesFiltradas = transacoesFiltradas.filter(
-        t => t.metodo_pagamento.toLowerCase() === (metodo as string).toLowerCase()
-      );
-    }
-    
-    if (termoBusca) {
-      const busca = (termoBusca as string).toLowerCase();
-      transacoesFiltradas = transacoesFiltradas.filter(t => 
-        t.id.toLowerCase().includes(busca) || 
-        t.cliente_nome.toLowerCase().includes(busca) || 
-        t.cliente_email.toLowerCase().includes(busca) ||
-        t.produto_nome.toLowerCase().includes(busca)
-      );
-    }
-    
-    // Total de resultados após a filtragem
-    const total = transacoesFiltradas.length;
-    
-    // Paginação
-    const paginaNum = parseInt(pagina as string);
-    const limiteNum = parseInt(limite as string);
-    const inicio = (paginaNum - 1) * limiteNum;
-    const fim = inicio + limiteNum;
-    
-    const transacoesPaginadas = transacoesFiltradas.slice(inicio, fim);
-    
+
     res.status(200).json({
-      transacoes: transacoesPaginadas,
-      total
+      transacoes,
+      total,
+      origem
     });
   } catch (error) {
-    console.error('Erro ao buscar transações:', error);
-    res.status(500).json({ message: 'Erro ao buscar transações' });
+    console.error('[API:Transacoes] Erro geral ao processar requisição de transações:', error);
+    
+    // Em caso de erro geral, retornar dados mockados
+    let transacoesMockPaginados = transacoesMock.slice(0, 10);
+    
+    res.status(200).json({ 
+      transacoes: transacoesMockPaginados,
+      total: transacoesMock.length,
+      origem: 'fallback-error'
+    });
   }
 } 
