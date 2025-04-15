@@ -5,29 +5,55 @@ export const GET_DASHBOARD_DATA = gql`
   query GetDashboardData {
     dadosDashboard {
       estatisticas {
-        vendasHoje
-        vendasMes
-        ticketMedio
-        totalClientes
+        transacoes {
+          total
+          aprovadas
+          pendentes
+          recusadas
+          valorTotal
+          crescimento
+        }
+        pedidos {
+          total
+          completos
+          processando
+          pendentes
+          falhas
+          valorTotal
+          crescimento
+        }
+        usuarios {
+          total
+          ativos
+          novos
+          crescimento
+        }
       }
-      transacoes {
-        dia
-        valor
-      }
-      statusPedidos {
-        status
-        quantidade
+      graficos {
+        transacoesPorDia {
+          data
+          total
+          valorAprovado
+        }
+        pedidosPorDia {
+          data
+          total
+          completos
+          falhas
+        }
+        statusPedidos {
+          labels
+          dados
+        }
       }
       atividadesRecentes {
         id
         tipo
-        descricao
         data
-        usuario {
-          id
-          nome
-          avatar
-        }
+        usuario
+        item
+        status
+        valor
       }
     }
   }
