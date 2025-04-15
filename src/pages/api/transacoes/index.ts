@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       pagina = '1', 
       limite = '10' 
     } = req.query;
-    
+
     // Construir parâmetros para a API de pagamentos
     const params: Record<string, any> = {
       page: pagina,

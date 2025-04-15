@@ -11,7 +11,8 @@ import {
   LogOut,
   Menu as MenuIcon,
   ChevronDown,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
@@ -28,6 +29,7 @@ const LinkItems: Array<LinkItemProps> = [
   { name: 'Dashboard', icon: Home, href: '/dashboard' },
   { name: 'Transações', icon: DollarSign, href: '/transacoes' },
   { name: 'Pedidos', icon: ShoppingCart, href: '/pedidos' },
+  { name: 'Reposições', icon: RefreshCw, href: '/reposicoes' },
   { name: 'Usuários', icon: Users, href: '/usuarios' },
 ];
 

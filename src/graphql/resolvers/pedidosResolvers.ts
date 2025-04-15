@@ -34,7 +34,7 @@ export const pedidosResolvers = {
           page: pagina,
           limit: limite
         };
-        
+
         // Adicionar filtros, se existirem
         if (filtro) {
           if (filtro.status && filtro.status !== 'todos') {
