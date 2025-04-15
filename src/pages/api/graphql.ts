@@ -16,7 +16,14 @@ const apolloServer = new ApolloServer({
 
 const startServer = apolloServer.start();
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+// Define the handler and explicitly type as any for CORS compatibility
+const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method === 'OPTIONS') {
     res.end();
     return false;
@@ -27,12 +34,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   await apolloServer.createHandler({
     path: '/api/graphql',
   })(req, res);
-}
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
 };
 
-export default cors(handler); 
+// Use type assertion to make TypeScript accept the handler with cors
+export default cors(handler as any); 

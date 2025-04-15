@@ -12,6 +12,16 @@ import { formatCurrency, formatDate } from '../utils/format';
 // Importação dinâmica dos componentes de gráfico para evitar problemas de SSR
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
+// At the top of the file, add this interface:
+interface Atividade {
+  id: string;
+  tipo: string;
+  usuario: string;
+  item: string;
+  status: string;
+  data: string;
+}
+
 export default function Dashboard() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -52,7 +62,7 @@ export default function Dashboard() {
       enabled: false,
     },
     xaxis: {
-      categories: dashboardData?.graficos.transacoesPorDia?.map(item => 
+      categories: dashboardData?.graficos.transacoesPorDia?.map((item: { data: string }) => 
         new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
       ) || [],
       axisBorder: {
@@ -79,11 +89,11 @@ export default function Dashboard() {
   const transacoesChartSeries = [
     {
       name: 'Transações',
-      data: dashboardData?.graficos.transacoesPorDia?.map(item => item.total) || [],
+      data: dashboardData?.graficos.transacoesPorDia?.map((item: { total: number }) => item.total) || [],
     },
     {
       name: 'Valor (R$)',
-      data: dashboardData?.graficos.transacoesPorDia?.map(item => item.valorAprovado / 100) || [],
+      data: dashboardData?.graficos.transacoesPorDia?.map((item: { valorAprovado: number }) => item.valorAprovado / 100) || [],
     },
   ];
 
@@ -253,7 +263,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-3">
-                {dashboardData?.atividadesRecentes?.map((atividade, index) => (
+                {dashboardData?.atividadesRecentes?.map((atividade: Atividade, index: number) => (
                   <li key={`${atividade.tipo}-${atividade.id}`}>
                     <div className="flex justify-between items-center">
                       <div>
@@ -287,7 +297,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                    {index < dashboardData.atividadesRecentes.length - 1 && (
+                    {index < (dashboardData.atividadesRecentes?.length || 0) - 1 && (
                       <hr className="mt-2 border-gray-200" />
                     )}
                   </li>

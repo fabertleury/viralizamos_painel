@@ -1,8 +1,21 @@
 import { prisma } from '../../lib/prisma';
 
+// Define types for filter and pagination
+interface PaginacaoInput {
+  pagina: number;
+  limite: number;
+}
+
+interface FiltroUsuarioInput {
+  ativo?: boolean;
+  dataInicio?: string;
+  dataFim?: string;
+  termoBusca?: string;
+}
+
 export const usuariosResolvers = {
   Query: {
-    usuarios: async (_, { filtro, paginacao }) => {
+    usuarios: async (_: any, { filtro, paginacao }: { filtro?: FiltroUsuarioInput, paginacao: PaginacaoInput }) => {
       try {
         const { pagina, limite } = paginacao;
         const skip = (pagina - 1) * limite;
@@ -79,7 +92,7 @@ export const usuariosResolvers = {
       }
     },
     
-    usuario: async (_, { id }) => {
+    usuario: async (_: any, { id }: { id: string }) => {
       try {
         const usuario = await prisma.user.findUnique({
           where: { id },

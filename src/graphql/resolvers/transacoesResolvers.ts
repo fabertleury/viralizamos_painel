@@ -1,8 +1,22 @@
 import { pagamentosPool } from '../../lib/prisma';
 
+// Define types for filter and pagination
+interface PaginacaoInput {
+  pagina: number;
+  limite: number;
+}
+
+interface FiltroTransacaoInput {
+  status?: string;
+  metodo?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  termoBusca?: string;
+}
+
 export const transacoesResolvers = {
   Query: {
-    transacoes: async (_, { filtro, paginacao }) => {
+    transacoes: async (_: any, { filtro, paginacao }: { filtro?: FiltroTransacaoInput, paginacao: PaginacaoInput }) => {
       try {
         const { pagina, limite } = paginacao;
         const offset = (pagina - 1) * limite;
@@ -88,7 +102,7 @@ export const transacoesResolvers = {
       }
     },
     
-    transacao: async (_, { id }) => {
+    transacao: async (_: any, { id }: { id: string }) => {
       try {
         const query = `
           SELECT 

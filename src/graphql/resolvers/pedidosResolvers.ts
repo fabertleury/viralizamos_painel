@@ -1,8 +1,22 @@
 import { ordersPool } from '../../lib/prisma';
 
+// Define types for filter and pagination
+interface PaginacaoInput {
+  pagina: number;
+  limite: number;
+}
+
+interface FiltroInput {
+  status?: string;
+  provedor?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  termoBusca?: string;
+}
+
 export const pedidosResolvers = {
   Query: {
-    pedidos: async (_, { filtro, paginacao }) => {
+    pedidos: async (_: any, { filtro, paginacao }: { filtro?: FiltroInput, paginacao: PaginacaoInput }) => {
       try {
         const { pagina, limite } = paginacao;
         const offset = (pagina - 1) * limite;
@@ -97,7 +111,7 @@ export const pedidosResolvers = {
       }
     },
     
-    pedido: async (_, { id }) => {
+    pedido: async (_: any, { id }: { id: string }) => {
       try {
         const query = `
           SELECT 
@@ -170,7 +184,7 @@ export const pedidosResolvers = {
   },
   
   Mutation: {
-    reenviarPedido: async (_, { id }) => {
+    reenviarPedido: async (_: any, { id }: { id: string }) => {
       try {
         // Atualizando o status do pedido para "processando" e marcando para reprocessamento
         const query = `
@@ -200,7 +214,7 @@ export const pedidosResolvers = {
           sucesso: true,
           mensagem: `Pedido ${id} marcado para reprocessamento`
         };
-      } catch (error) {
+      } catch (error: any) {
         console.error(`Erro ao reenviar pedido ${id}:`, error);
         return {
           sucesso: false,

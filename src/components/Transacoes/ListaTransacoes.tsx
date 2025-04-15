@@ -34,9 +34,31 @@ import { formatCurrency, formatDate } from '../../utils/format';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/router';
 
+// Define the transaction status type
+type TransacaoStatus = 'PENDENTE' | 'APROVADO' | 'ESTORNADO' | 'CANCELADO' | 'EM_ANALISE';
+
+// Define payment method type
+type MetodoPagamento = 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'PIX' | 'BOLETO' | 'TRANSFERENCIA';
+
+// Define the transaction interface
+interface Transacao {
+  id: string;
+  status: TransacaoStatus;
+  metodoPagamento: MetodoPagamento;
+  valor: number;
+  data: string;
+  cliente: {
+    nome: string;
+    email: string;
+  };
+  produto: {
+    nome: string;
+  };
+}
+
 const ITENS_POR_PAGINA = 10;
 
-const statusColors = {
+const statusColors: Record<TransacaoStatus, string> = {
   'PENDENTE': 'bg-yellow-100 text-yellow-800',
   'APROVADO': 'bg-green-100 text-green-800',
   'ESTORNADO': 'bg-red-100 text-red-800',
@@ -44,7 +66,7 @@ const statusColors = {
   'EM_ANALISE': 'bg-blue-100 text-blue-800'
 };
 
-const metodoPagamentoLabels = {
+const metodoPagamentoLabels: Record<MetodoPagamento, string> = {
   'CARTAO_CREDITO': 'Cartão de Crédito',
   'CARTAO_DEBITO': 'Cartão de Débito',
   'PIX': 'PIX',
@@ -244,26 +266,24 @@ export default function ListaTransacoes() {
                     </TableRow>
                   ) : (
                     transacoes.map((transacao: any) => (
-                      <TableRow key={transacao.id}>
-                        <TableCell className="font-medium">{transacao.id.substring(0, 8)}...</TableCell>
-                        <TableCell>{formatDate(transacao.dataCriacao)}</TableCell>
+                      <TableRow key={transacao.id} onClick={() => handleVerDetalhes(transacao.id)} className="cursor-pointer hover:bg-gray-50">
+                        <TableCell>{transacao.id.substring(0, 8)}</TableCell>
+                        <TableCell>{transacao.cliente?.nome || 'N/A'}</TableCell>
+                        <TableCell>{transacao.produto?.nome || 'N/A'}</TableCell>
                         <TableCell>
-                          {transacao.clienteNome}
-                          <div className="text-xs text-gray-500">{transacao.clienteEmail}</div>
-                        </TableCell>
-                        <TableCell>{formatCurrency(transacao.valor / 100)}</TableCell>
-                        <TableCell>
-                          <Badge 
-                            className={statusColors[transacao.status] || 'bg-gray-100 text-gray-800'}
+                          <Badge
+                            className={statusColors[transacao.status as TransacaoStatus] || 'bg-gray-100 text-gray-800'}
                           >
                             {transacao.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>{metodoPagamentoLabels[transacao.metodoPagamento] || transacao.metodoPagamento}</TableCell>
                         <TableCell>
-                          <Button size="sm" onClick={() => handleVerDetalhes(transacao.id)}>
-                            Ver Detalhes
-                          </Button>
+                          {metodoPagamentoLabels[transacao.metodoPagamento as MetodoPagamento] || transacao.metodoPagamento || 'N/A'}
+                        </TableCell>
+                        <TableCell>{formatCurrency(transacao.valor)}</TableCell>
+                        <TableCell>{formatDate(transacao.data)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatDistanceToNow(new Date(transacao.data), { addSuffix: true, locale: ptBR })}
                         </TableCell>
                       </TableRow>
                     ))
@@ -272,12 +292,12 @@ export default function ListaTransacoes() {
               </Table>
             </div>
             
-            {totalPaginas > 0 && (
-              <div className="flex justify-end mt-4">
-                <Pagination
+            {transacoes.length > 0 && (
+              <div className="flex justify-center mt-8">
+                <Pagination 
                   currentPage={paginaAtual}
-                  totalPages={totalPaginas}
-                  onPageChange={setPaginaAtual}
+                  totalPages={totalPaginas} 
+                  onChange={setPaginaAtual} 
                 />
               </div>
             )}
