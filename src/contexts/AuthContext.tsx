@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@chakra-ui/react';
 
 interface User {
@@ -39,6 +39,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Verificar se o usuário está autenticado ao carregar a página
   useEffect(() => {
+    // Skip during SSR
+    if (typeof window === 'undefined') {
+      setIsLoading(false);
+      return;
+    }
+
     const checkAuth = async () => {
       try {
         // Simulando verificação de token - em produção, verifique com uma API
@@ -57,7 +63,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error) {
         console.error('Erro ao verificar autenticação:', error);
-        localStorage.removeItem('auth_token');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('auth_token');
+        }
         setUser(null);
       } finally {
         setIsLoading(false);
@@ -83,7 +91,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
         
         // Salvar token e usuário
-        localStorage.setItem('auth_token', token);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth_token', token);
+        }
         setUser(userData);
         
         toast({
@@ -109,14 +119,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
       
       setUser(null);
-      localStorage.removeItem('auth_token');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('auth_token');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+    }
     setUser(null);
     router.push('/login');
     
