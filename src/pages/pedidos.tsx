@@ -347,6 +347,28 @@ export default function Pedidos() {
     }
   };
 
+  // Adicionar este useEffect para configurar o axios
+  useEffect(() => {
+    // Recuperar o token do armazenamento local
+    const token = localStorage.getItem('auth_token');
+    
+    if (token) {
+      // Configurar o interceptor para adicionar o token a todas as requisições
+      const interceptor = axios.interceptors.request.use(
+        config => {
+          config.headers.Authorization = `Bearer ${token}`;
+          return config;
+        },
+        error => Promise.reject(error)
+      );
+      
+      // Limpar o interceptor quando o componente for desmontado
+      return () => {
+        axios.interceptors.request.eject(interceptor);
+      };
+    }
+  }, []);
+
   if (authLoading) {
     return (
       <Flex justify="center" align="center" minH="100vh">

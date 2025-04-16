@@ -28,164 +28,172 @@ import {
   Switch,
   FormControl,
   FormLabel,
+  Spinner,
+  useToast,
 } from '@chakra-ui/react';
-import { FiSearch, FiFilter, FiMoreVertical, FiEdit, FiTrash2, FiMail } from 'react-icons/fi';
+import { FiSearch, FiFilter, FiMoreVertical, FiEdit, FiTrash2, FiMail, FiUserPlus } from 'react-icons/fi';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/router';
-
-// Dados simulados de usuários
-const usuariosSimulados = [
-  {
-    id: '1',
-    nome: 'João Silva',
-    email: 'joao@exemplo.com',
-    tipo: 'cliente',
-    ativo: true,
-    dataCadastro: '2023-05-12',
-    ultimoAcesso: '2023-10-18',
-    avatar: 'https://i.pravatar.cc/150?img=1',
-  },
-  {
-    id: '2',
-    nome: 'Maria Oliveira',
-    email: 'maria@exemplo.com',
-    tipo: 'cliente',
-    ativo: true,
-    dataCadastro: '2023-06-24',
-    ultimoAcesso: '2023-10-17',
-    avatar: 'https://i.pravatar.cc/150?img=5',
-  },
-  {
-    id: '3',
-    nome: 'Carlos Santos',
-    email: 'carlos@exemplo.com',
-    tipo: 'cliente',
-    ativo: false,
-    dataCadastro: '2023-04-30',
-    ultimoAcesso: '2023-09-05',
-    avatar: 'https://i.pravatar.cc/150?img=11',
-  },
-  {
-    id: '4',
-    nome: 'Ana Costa',
-    email: 'ana@exemplo.com',
-    tipo: 'admin',
-    ativo: true,
-    dataCadastro: '2023-03-15',
-    ultimoAcesso: '2023-10-20',
-    avatar: 'https://i.pravatar.cc/150?img=9',
-  },
-  {
-    id: '5',
-    nome: 'Paulo Souza',
-    email: 'paulo@exemplo.com',
-    tipo: 'cliente',
-    ativo: true,
-    dataCadastro: '2023-07-11',
-    ultimoAcesso: '2023-10-15',
-    avatar: 'https://i.pravatar.cc/150?img=12',
-  },
-  {
-    id: '6',
-    nome: 'Fernanda Lima',
-    email: 'fernanda@exemplo.com',
-    tipo: 'admin',
-    ativo: true,
-    dataCadastro: '2023-02-28',
-    ultimoAcesso: '2023-10-19',
-    avatar: 'https://i.pravatar.cc/150?img=3',
-  },
-  {
-    id: '7',
-    nome: 'Ricardo Pereira',
-    email: 'ricardo@exemplo.com',
-    tipo: 'cliente',
-    ativo: false,
-    dataCadastro: '2023-08-05',
-    ultimoAcesso: '2023-09-10',
-    avatar: 'https://i.pravatar.cc/150?img=7',
-  },
-];
+import Link from 'next/link';
+import { buscarUsuariosDetalhados, atualizarStatusUsuario } from '../services/usuariosService';
 
 export default function Usuarios() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [usuarios, setUsuarios] = useState(usuariosSimulados);
+  const toast = useToast();
+  
+  const [usuarios, setUsuarios] = useState<any[]>([]);
   const [filtroTipo, setFiltroTipo] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [termoBusca, setTermoBusca] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [totalUsuarios, setTotalUsuarios] = useState(0);
+  const [isMutating, setIsMutating] = useState(false);
   
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, authLoading, router]);
   
-  // Filtrar usuários
-  const filtrarUsuarios = () => {
-    let resultado = usuariosSimulados;
-    
-    // Aplicar filtro de tipo
-    if (filtroTipo !== 'todos') {
-      resultado = resultado.filter(item => item.tipo === filtroTipo);
-    }
-    
-    // Aplicar filtro de status
-    if (filtroStatus !== 'todos') {
-      const status = filtroStatus === 'ativo';
-      resultado = resultado.filter(item => item.ativo === status);
-    }
-    
-    // Aplicar termo de busca
-    if (termoBusca) {
-      const termo = termoBusca.toLowerCase();
-      resultado = resultado.filter(
-        item =>
-          item.nome.toLowerCase().includes(termo) ||
-          item.email.toLowerCase().includes(termo)
+  // Carregar usuários
+  const carregarUsuarios = async () => {
+    try {
+      setIsLoading(true);
+      
+      const resultado = await buscarUsuariosDetalhados(
+        {
+          tipo: filtroTipo !== 'todos' ? filtroTipo : undefined,
+          status: filtroStatus !== 'todos' ? filtroStatus : undefined,
+          termoBusca: termoBusca || undefined
+        },
+        paginaAtual,
+        10 // Limite por página
       );
+      
+      setUsuarios(resultado.usuarios || []);
+      setTotalUsuarios(resultado.total || 0);
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error);
+      toast({
+        title: 'Erro ao carregar usuários',
+        description: 'Não foi possível buscar os usuários. Tente novamente.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+      setUsuarios([]);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setUsuarios(resultado);
   };
   
-  // Executar filtro quando as dependências mudarem
+  // Executar busca quando as dependências mudarem
   useEffect(() => {
-    filtrarUsuarios();
-  }, [filtroTipo, filtroStatus, termoBusca]);
+    if (isAuthenticated) {
+      carregarUsuarios();
+    }
+  }, [isAuthenticated, paginaAtual]);
+  
+  // Filtrar usuários manualmente
+  const filtrarUsuarios = () => {
+    setPaginaAtual(1); // Voltar para a primeira página ao filtrar
+    carregarUsuarios();
+  };
   
   // Formatação de data
   const formatarData = (dataISO: string) => {
+    if (!dataISO) return 'N/A';
     const data = new Date(dataISO);
     return data.toLocaleDateString('pt-BR');
   };
   
-  // Simulação de alternar status do usuário
-  const alternarStatus = (id: string, statusAtual: boolean) => {
-    // Em produção, esta função chamaria uma API
-    setUsuarios(prevUsuarios =>
-      prevUsuarios.map(user =>
-        user.id === id ? { ...user, ativo: !statusAtual } : user
-      )
-    );
-  };
-  
-  // Simulação de edição de usuário
-  const editarUsuario = (id: string) => {
-    alert(`Edição simulada do usuário ${id}`);
-  };
-  
-  // Simulação de exclusão de usuário
-  const excluirUsuario = (id: string) => {
-    if (confirm(`Tem certeza que deseja excluir o usuário ${id}?`)) {
-      setUsuarios(prevUsuarios => prevUsuarios.filter(user => user.id !== id));
+  // Alternar status do usuário
+  const alternarStatus = async (id: string, statusAtual: boolean) => {
+    try {
+      setIsMutating(true);
+      const sucesso = await atualizarStatusUsuario(id, !statusAtual);
+      
+      if (sucesso) {
+        setUsuarios(prevUsuarios =>
+          prevUsuarios.map(user =>
+            user.id === id ? { ...user, ativo: !statusAtual } : user
+          )
+        );
+        
+        toast({
+          title: 'Status atualizado',
+          description: `Usuário ${!statusAtual ? 'ativado' : 'desativado'} com sucesso.`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        throw new Error('Falha ao atualizar status');
+      }
+    } catch (error) {
+      console.error('Erro ao alterar status:', error);
+      toast({
+        title: 'Erro ao atualizar status',
+        description: 'Não foi possível alterar o status do usuário. Tente novamente.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsMutating(false);
     }
   };
   
-  // Simulação de envio de email
+  // Navegar para página de edição
+  const editarUsuario = (id: string) => {
+    router.push(`/usuarios/${id}`);
+  };
+  
+  // Excluir usuário
+  const excluirUsuario = async (id: string, nome: string) => {
+    if (confirm(`Tem certeza que deseja excluir o usuário ${nome}?`)) {
+      try {
+        setIsMutating(true);
+        
+        // Implementar chamada à API para excluir usuário
+        const response = await fetch(`/api/usuarios/${id}`, {
+          method: 'DELETE',
+        });
+        
+        if (response.ok) {
+          setUsuarios(prevUsuarios => prevUsuarios.filter(user => user.id !== id));
+          
+          toast({
+            title: 'Usuário excluído',
+            description: 'O usuário foi excluído com sucesso.',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        } else {
+          throw new Error('Falha ao excluir usuário');
+        }
+      } catch (error) {
+        console.error('Erro ao excluir usuário:', error);
+        toast({
+          title: 'Erro ao excluir usuário',
+          description: 'Não foi possível excluir o usuário. Tente novamente.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setIsMutating(false);
+      }
+    }
+  };
+  
+  // Enviar email para usuário
   const enviarEmail = (email: string) => {
-    alert(`Email simulado enviado para ${email}`);
+    window.location.href = `mailto:${email}`;
   };
   
   // Renderizar tipo de usuário com estilo
@@ -201,10 +209,10 @@ export default function Usuarios() {
     );
   };
 
-  if (isLoading) {
+  if (authLoading) {
     return (
       <Flex justify="center" align="center" minH="100vh">
-        <Text>Carregando...</Text>
+        <Spinner size="xl" />
       </Flex>
     );
   }
@@ -212,9 +220,26 @@ export default function Usuarios() {
   return (
     <AdminLayout>
       <Box p={4}>
-        <Heading as="h1" size="xl" mb={6}>
-          Usuários
-        </Heading>
+        <Flex 
+          direction={{ base: 'column', md: 'row' }} 
+          justify="space-between" 
+          align={{ base: 'flex-start', md: 'center' }}
+          mb={6}
+        >
+          <Heading as="h1" size="xl">
+            Usuários
+          </Heading>
+          
+          <Button
+            as={Link}
+            href="/usuarios/novo"
+            colorScheme="brand"
+            leftIcon={<FiUserPlus />}
+            mt={{ base: 4, md: 0 }}
+          >
+            Novo Usuário
+          </Button>
+        </Flex>
         
         <Flex 
           direction={{ base: 'column', md: 'row' }} 
@@ -259,6 +284,7 @@ export default function Usuarios() {
               colorScheme="brand"
               onClick={filtrarUsuarios}
               leftIcon={<FiFilter />}
+              isDisabled={isLoading}
             >
               Filtrar
             </Button>
@@ -284,19 +310,31 @@ export default function Usuarios() {
               </Tr>
             </Thead>
             <Tbody>
-              {usuarios.length > 0 ? (
+              {isLoading ? (
+                <Tr>
+                  <Td colSpan={7} textAlign="center" py={6}>
+                    <Spinner size="md" />
+                    <Text mt={2}>Carregando usuários...</Text>
+                  </Td>
+                </Tr>
+              ) : usuarios.length > 0 ? (
                 usuarios.map((usuario) => (
                   <Tr key={usuario.id}>
                     <Td>
                       <Flex align="center">
-                        <Avatar size="sm" src={usuario.avatar} mr={2} />
+                        <Avatar 
+                          size="sm" 
+                          name={usuario.nome}
+                          src={usuario.foto_perfil} 
+                          mr={2} 
+                        />
                         <Text fontWeight="medium">{usuario.nome}</Text>
                       </Flex>
                     </Td>
                     <Td>{usuario.email}</Td>
                     <Td>{renderTipoUsuario(usuario.tipo)}</Td>
-                    <Td>{formatarData(usuario.dataCadastro)}</Td>
-                    <Td>{formatarData(usuario.ultimoAcesso)}</Td>
+                    <Td>{formatarData(usuario.data_criacao)}</Td>
+                    <Td>{formatarData(usuario.ultimo_acesso)}</Td>
                     <Td>
                       <FormControl display="flex" alignItems="center" justifyContent="center">
                         <Switch 
@@ -304,6 +342,7 @@ export default function Usuarios() {
                           isChecked={usuario.ativo}
                           onChange={() => alternarStatus(usuario.id, usuario.ativo)}
                           size="sm"
+                          isDisabled={isMutating}
                         />
                       </FormControl>
                     </Td>
@@ -332,7 +371,7 @@ export default function Usuarios() {
                           <MenuDivider />
                           <MenuItem 
                             icon={<FiTrash2 />}
-                            onClick={() => excluirUsuario(usuario.id)}
+                            onClick={() => excluirUsuario(usuario.id, usuario.nome)}
                             color="red.500"
                           >
                             Excluir
@@ -352,6 +391,28 @@ export default function Usuarios() {
             </Tbody>
           </Table>
         </Box>
+        
+        {totalUsuarios > 10 && (
+          <Flex justify="center" mt={6}>
+            <HStack>
+              <Button
+                onClick={() => setPaginaAtual(prev => Math.max(1, prev - 1))}
+                isDisabled={paginaAtual === 1 || isLoading}
+              >
+                Anterior
+              </Button>
+              <Text>
+                Página {paginaAtual} de {Math.ceil(totalUsuarios / 10)}
+              </Text>
+              <Button
+                onClick={() => setPaginaAtual(prev => prev + 1)}
+                isDisabled={paginaAtual >= Math.ceil(totalUsuarios / 10) || isLoading}
+              >
+                Próxima
+              </Button>
+            </HStack>
+          </Flex>
+        )}
       </Box>
     </AdminLayout>
   );

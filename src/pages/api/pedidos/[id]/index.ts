@@ -41,8 +41,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw new Error('Pool de conexão não inicializado');
     }
 
-    const { id } = req.query;
-    
+  const { id } = req.query;
+  
     // Buscar detalhes do pedido
     const query = `
       SELECT 

@@ -50,6 +50,28 @@ const PedidoDetalhes: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const cancelRef = React.useRef<HTMLButtonElement>(null);
 
+  // Configurar axios para usar o token em todas as requisições
+  useEffect(() => {
+    // Recuperar o token do armazenamento local
+    const token = localStorage.getItem('auth_token');
+    
+    if (token) {
+      // Configurar o interceptor para adicionar o token a todas as requisições
+      const interceptor = axios.interceptors.request.use(
+        config => {
+          config.headers.Authorization = `Bearer ${token}`;
+          return config;
+        },
+        error => Promise.reject(error)
+      );
+      
+      // Limpar o interceptor quando o componente for desmontado
+      return () => {
+        axios.interceptors.request.eject(interceptor);
+      };
+    }
+  }, []);
+  
   // Carregar dados do pedido quando o componente for montado ou o ID mudar
   useEffect(() => {
     if (isAuthenticated && router.query.id) {
@@ -63,13 +85,9 @@ const PedidoDetalhes: React.FC = () => {
     
     try {
       setIsLoading(true);
+      console.log(`Carregando detalhes do pedido ${id}...`);
       
-      // Adiciona token de autenticação ao cabeçalho da requisição
-      const token = localStorage.getItem('auth_token');
-      const response = await axios.get(`/api/pedidos/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
+      const response = await axios.get(`/api/pedidos/${id}`);
       console.log('Dados do pedido carregados:', response.data);
       setPedido(response.data);
     } catch (error) {
@@ -91,12 +109,7 @@ const PedidoDetalhes: React.FC = () => {
     
     try {
       setIsProcessing(true);
-      
-      // Adiciona token de autenticação ao cabeçalho da requisição
-      const token = localStorage.getItem('auth_token');
-      const response = await axios.post(`/api/pedidos/${pedido.id}/reenviar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.post(`/api/pedidos/${pedido.id}/reenviar`, {});
       
       if (response.data.success) {
         toast({
@@ -219,12 +232,7 @@ const PedidoDetalhes: React.FC = () => {
     
     try {
       setIsProcessing(true);
-      
-      // Adiciona token de autenticação ao cabeçalho da requisição
-      const token = localStorage.getItem('auth_token');
-      const response = await axios.get(`/api/pedidos/${pedido.id}/check-status`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get(`/api/pedidos/${pedido.id}/check-status`);
       
       if (response.data.success) {
         toast({
@@ -567,6 +575,21 @@ const PedidoDetalhes: React.FC = () => {
                       >
                         Ver Perfil do Cliente
                       </Button>
+                      
+                      {/* Botão para gerar recibo (apenas quando o pagamento está aprovado) */}
+                      {pedido.transacao_detalhes && pedido.transacao_detalhes.status === 'approved' && (
+                        <Button
+                          as="a"
+                          href={`/api/pedidos/${pedido.id}/receipt`}
+                          target="_blank"
+                          colorScheme="green"
+                          variant="outline"
+                          width="full"
+                          mt={2}
+                        >
+                          Gerar Recibo
+                        </Button>
+                      )}
                     </VStack>
                   </CardBody>
                 </Card>

@@ -14,8 +14,8 @@ let ordersPool: Pool | null = null;
 if (isServerSide && process.env.NEXT_PHASE !== 'phase-production-build') {
   pagamentosPool = new Pool({
     connectionString: process.env.PAGAMENTOS_DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-  });
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
   ordersPool = new Pool({
     connectionString: process.env.ORDERS_DATABASE_URL,
@@ -890,7 +890,7 @@ export async function buscarUsuarioPorId(id: number): Promise<Usuario | null> {
     if (result.rows.length === 0) {
       return null;
     }
-
+    
     return result.rows[0];
   } catch (error) {
     console.error(`Erro ao buscar usuário com ID ${id}:`, error);
