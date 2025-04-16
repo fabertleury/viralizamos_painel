@@ -41,6 +41,7 @@
     "json-format": "^1.0.1",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.286.0",
+    "micro": "^10.0.1",
     "micro-cors": "^0.1.1",
     "next": "^13.5.4",
     "npm-force-resolutions": "0.0.10",
