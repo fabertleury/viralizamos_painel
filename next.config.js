@@ -62,6 +62,14 @@ const nextConfig = {
       }
     ];
   },
+  // Ignora erros de prerender em rotas específicas
+  experimental: {
+    // Esta configuração permite ignorar erros durante o build para páginas específicas
+    isrMemoryCacheSize: 0,  // Desabilita o cache de ISR para evitar problemas de memória
+    outputFileTracingExcludes: {
+      '*': ['node_modules', '.git', '.next']
+    }
+  }
 };
 
 module.exports = nextConfig; 

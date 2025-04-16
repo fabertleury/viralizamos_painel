@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "NODE_OPTIONS=\"--max-old-space-size=4096\" NEXT_DISABLE_ESLINT=1 next build",
-    "build:safe": "NEXT_DISABLE_ESLINT=1 next build --no-lint",
+    "build": "next build",
+    "build:safe": "next build --no-lint",
     "start": "next start",
     "lint": "next lint",
     "db:init": "node src/db/initDb.js",

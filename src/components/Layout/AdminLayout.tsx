@@ -1,6 +1,6 @@
 import React, { ReactNode, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
+import { usePathname } from 'next/navigation';
 import {
   Home,
   DollarSign,
@@ -113,7 +113,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 }
 
 const SidebarContent = () => {
-  const router = useRouter();
+  const pathname = usePathname();
   
   return (
     <div className="py-4">
@@ -127,7 +127,7 @@ const SidebarContent = () => {
             key={link.name} 
             icon={link.icon} 
             href={link.href}
-            isActive={router.pathname === link.href}
+            isActive={pathname === link.href}
           >
             {link.name}
           </NavItem>
