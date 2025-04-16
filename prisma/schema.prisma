@@ -27,21 +27,22 @@ model User {
 // Os modelos abaixo representam as tabelas do viralizamos_orders
 // Esses dados serão acessados via API GraphQL do serviço de Orders
 model Order {
-  id              String    @id @default(uuid())
-  userId          String    @map("user_id")
-  serviceId       String    @map("service_id")
-  providerId      String    @map("provider_id")
-  transactionId   String?   @map("transaction_id")
-  providerOrderId String?   @map("provider_order_id")
+  id              String       @id @default(uuid())
+  userId          String       @map("user_id")
+  serviceId       String       @map("service_id")
+  providerId      String       @map("provider_id")
+  transactionId   String?      @map("transaction_id")
+  providerOrderId String?      @map("provider_order_id")
   quantity        Int
   price           Int
-  status          String    @default("pending")
-  apiResponse     Json?     @map("api_response")
-  errorMessage    String?   @map("error_message")
-  retryCount      Int       @default(0) @map("retry_count")
-  lastCheck       DateTime? @map("last_check")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  status          String       @default("pending")
+  apiResponse     Json?        @map("api_response")
+  errorMessage    String?      @map("error_message")
+  retryCount      Int          @default(0) @map("retry_count")
+  lastCheck       DateTime?    @map("last_check")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  reposicoes      Reposicao[]
 
   @@map("orders")
 }
@@ -78,6 +79,23 @@ model Service {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("services")
+}
+
+// Modelo para reposições
+model Reposicao {
+  id                String     @id @default(uuid())
+  orderId           String     @map("order_id")
+  order             Order      @relation(fields: [orderId], references: [id])
+  motivo            String
+  observacoes       String?
+  status            String     @default("pendente")
+  resposta          String?
+  tentativas        Int        @default(0)
+  dataSolicitacao   DateTime   @default(now()) @map("data_solicitacao")
+  dataProcessamento DateTime?  @map("data_processamento")
+  processadoPor     String?    @map("processado_por")
+  
+  @@map("reposicoes")
 }
 
 // Os modelos abaixo representam as tabelas do viralizamos_pagamentos_novo
