@@ -3,6 +3,8 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   output: 'standalone',
+  // Definir explicitamente o diretório de páginas para evitar conflito entre src/pages e src/app
+  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
   images: {
     domains: [
       'localhost',

@@ -8,16 +8,24 @@ RUN apk add --no-cache curl libc6-compat python3 make g++
 # Configurar ambiente
 ENV NODE_ENV=production
 ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copiar arquivos de dependências
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY .npmrc ./
 
-# Instalar dependências de forma mais flexível
-RUN npm install --production=false --frozen-lockfile=false
+# Limpar cache do npm e instalar dependências
+RUN npm cache clean --force && \
+    npm install --production=false --frozen-lockfile=false
 
 # Copiar o resto do código
 COPY . .
+
+# Verificar estrutura de diretórios
+RUN echo "Verificando estrutura de diretórios:" && \
+    ls -la && \
+    echo "Conteúdo da pasta src:" && \
+    ls -la src/
 
 # Construir a aplicação
 RUN npm run build
@@ -30,6 +38,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copiar apenas os arquivos necessários
 COPY --from=builder /app/next.config.js ./
@@ -45,6 +54,8 @@ RUN echo '#!/bin/sh' > start.sh \
     && echo 'echo "📋 Verificando ambiente:"' >> start.sh \
     && echo 'echo "- Diretório atual: $(pwd)"' >> start.sh \
     && echo 'echo "- Arquivos: $(ls -la)"' >> start.sh \
+    && echo 'echo "- Conteúdo da pasta .next:"' >> start.sh \
+    && echo 'ls -la .next/' >> start.sh \
     && echo 'echo "🚀 Iniciando servidor..."' >> start.sh \
     && echo 'exec npm start' >> start.sh \
     && chmod +x ./start.sh

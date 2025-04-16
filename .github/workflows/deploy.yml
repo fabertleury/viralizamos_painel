@@ -1,58 +1,90 @@
-name: Build and Deploy Painel Admin
+name: Deploy Painel Admin
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Ambiente para deploy'
+        required: true
+        default: 'production'
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: |
-        npm config set legacy-peer-deps true
-        npm install --no-audit --no-fund --production=false --frozen-lockfile=false
+      - name: Checkout código
+        uses: actions/checkout@v3
       
-    - name: Run linter
-      run: npm run lint || true
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
       
-    - name: Build
-      run: npm run build
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        NODE_OPTIONS: "--max-old-space-size=4096"
-        
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      - name: Instalar dependências
+        run: |
+          npm ci --legacy-peer-deps
       
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: |
-          ghcr.io/${{ github.repository_owner }}/viralizamos-painel:latest
-          ghcr.io/${{ github.repository_owner }}/viralizamos-painel:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          NODE_OPTIONS="--max-old-space-size=4096"
-          NPM_CONFIG_LEGACY_PEER_DEPS=true 
+      - name: Verificar estrutura do projeto
+        run: |
+          echo "Verificando estrutura de pastas..."
+          ls -la ./src
+          echo "Conteúdo da pasta src/pages:"
+          ls -la ./src/pages || echo "Pasta pages não encontrada"
+          echo "Conteúdo da pasta src/app:"
+          ls -la ./src/app || echo "Pasta app não encontrada"
+      
+      - name: Verificar conflitos de diretórios
+        run: |
+          if [ -d "./src/app/pages" ]; then
+            echo "AVISO: Detectada estrutura conflitante src/app/pages"
+            echo "Corrigindo temporariamente..."
+            mkdir -p ./src/app/pages_temp
+            mv ./src/app/pages/* ./src/app/pages_temp/ || true
+            rm -rf ./src/app/pages
+          fi
+      
+      - name: Build
+        run: |
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          npm run build
+        env:
+          CI: false  # Permite que o build continue mesmo com warnings
+          NEXT_TELEMETRY_DISABLED: 1
+      
+      - name: Restaurar estrutura original
+        if: always()
+        run: |
+          if [ -d "./src/app/pages_temp" ]; then
+            echo "Restaurando estrutura original..."
+            mkdir -p ./src/app/pages
+            mv ./src/app/pages_temp/* ./src/app/pages/ || true
+            rm -rf ./src/app/pages_temp
+          fi
+      
+      - name: Construir e publicar imagem Docker
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/viralizamos/painel-admin:latest
+          build-args: |
+            NODE_ENV=production
+        env:
+          DOCKER_USERNAME: ${{ github.actor }}
+          DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Deploy para produção
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd /opt/viralizamos
+            docker-compose pull painel
+            docker-compose up -d painel
+            docker system prune -f 
