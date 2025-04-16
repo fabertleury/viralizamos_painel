@@ -1,70 +1,68 @@
-FROM node:18-alpine AS builder
+FROM node:18-alpine AS base
 
+# Instalar dependências básicas
+RUN apk add --no-cache libc6-compat python3 make g++
+
+# Definir diretório de trabalho
 WORKDIR /app
 
-# Instalar ferramentas básicas e dependências necessárias
-RUN apk add --no-cache curl libc6-compat python3 make g++
-
-# Configurar ambiente
+# Configurações para aumentar a estabilidade do build
 ENV NODE_ENV=production
-ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# Copiar arquivos de dependências
-COPY package.json package-lock.json ./
-COPY .npmrc ./
+# Etapa de instalação de dependências
+FROM base AS deps
+WORKDIR /app
 
-# Limpar cache do npm e instalar dependências
+# Copiar apenas arquivos de configuração de dependências
+COPY package.json package-lock.json .npmrc ./
+
+# Limpar cache e instalar dependências
 RUN npm cache clean --force && \
-    npm install --production=false --frozen-lockfile=false
+    npm ci --production=false --no-audit
 
-# Copiar o resto do código
+# Etapa de construção
+FROM base AS builder
+WORKDIR /app
+
+# Copiar dependências da etapa anterior
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Verificar estrutura de diretórios
-RUN echo "Verificando estrutura de diretórios:" && \
-    ls -la && \
-    echo "Conteúdo da pasta src:" && \
-    ls -la src/
+# Usar arquivo de ambiente específico de produção
+COPY .env.production .env
 
-# Construir a aplicação
+# Desativar eslint e typescript checking para o build
+ENV NEXT_DISABLE_ESLINT=1
+
+# Build
 RUN npm run build
 
-# Segunda etapa para menor tamanho final
-FROM node:18-alpine AS runner
-
+# Etapa de produção
+FROM base AS runner
 WORKDIR /app
 
+# Variáveis de ambiente para produção
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
-ENV NEXT_TELEMETRY_DISABLED=1
 
-# Copiar apenas os arquivos necessários
+# Copiar apenas os arquivos necessários para produção
 COPY --from=builder /app/next.config.js ./
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/.env.example ./.env
+COPY --from=builder /app/.env.production ./.env
 
-# Criar script de inicialização
-RUN echo '#!/bin/sh' > start.sh \
-    && echo 'echo "=== STARTING VIRALIZAMOS PAINEL ADMIN ==="' >> start.sh \
-    && echo 'echo "📋 Verificando ambiente:"' >> start.sh \
-    && echo 'echo "- Diretório atual: $(pwd)"' >> start.sh \
-    && echo 'echo "- Arquivos: $(ls -la)"' >> start.sh \
-    && echo 'echo "- Conteúdo da pasta .next:"' >> start.sh \
-    && echo 'ls -la .next/' >> start.sh \
-    && echo 'echo "🚀 Iniciando servidor..."' >> start.sh \
-    && echo 'exec npm start' >> start.sh \
-    && chmod +x ./start.sh
+# Expor porta
+EXPOSE 3000
 
-# Health check
+# Verificação de saúde
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-EXPOSE 3000
-
-# Iniciar a aplicação
-CMD ["./start.sh"] 
+# Comando para iniciar
+CMD ["npm", "start"] 

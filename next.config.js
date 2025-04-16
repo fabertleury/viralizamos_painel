@@ -1,10 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   swcMinify: true,
   output: 'standalone',
-  // Definir explicitamente o diretório de páginas para evitar conflito entre src/pages e src/app
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
+  poweredByHeader: false,
   images: {
     domains: [
       'localhost',
@@ -18,6 +18,11 @@ const nextConfig = {
       'avatars.githubusercontent.com',
       'cdn.pixabay.com'
     ],
+    minimumCacheTTL: 60,
+  },
+  compiler: {
+    // Remover todos os console.log em produção
+    removeConsole: process.env.NODE_ENV === 'production',
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
