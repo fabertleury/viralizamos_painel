@@ -21,47 +21,47 @@ import {
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
 import { useAuth } from '../contexts/AuthContext';
 
+// Componente de login simplificado
 const LoginPage = () => {
-  const [isMounted, setIsMounted] = useState(false);
+  // Estado local do formulário
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isEmailError, setIsEmailError] = useState(false);
   const [isPasswordError, setIsPasswordError] = useState(false);
-  const { login, isLoading, isAuthenticated, user } = useAuth();
+  
+  // Estado de carregamento inicial
+  const [initialLoading, setInitialLoading] = useState(true);
+  
+  // Context de autenticação
+  const { login, isLoading } = useAuth();
   const toast = useToast();
 
-  // Verificar se o componente foi montado
+  // Verificação única ao carregar a página
   useEffect(() => {
-    setIsMounted(true);
-    
-    // Verificar autenticação no localStorage para evitar ciclos de redirecionamento
-    const checkAuth = () => {
+    // Verificar se já existe uma sessão válida e redirecionar diretamente
+    if (typeof window !== 'undefined') {
       try {
-        if (typeof window !== 'undefined') {
-          const token = localStorage.getItem('auth_token');
-          const storedUser = localStorage.getItem('auth_user');
-          
-          if (token && storedUser) {
-            window.location.href = '/dashboard';
-          }
+        const token = window.localStorage.getItem('auth_token');
+        const user = window.localStorage.getItem('auth_user');
+        
+        if (token && user) {
+          // Já está logado, redirecionar para o dashboard
+          window.location.href = '/dashboard';
         }
       } catch (error) {
-        console.error('Error checking auth:', error);
+        console.error('Erro ao verificar autenticação:', error);
+      } finally {
+        // Finalizar o carregamento inicial independentemente do resultado
+        setInitialLoading(false);
       }
-    };
-    
-    // Executar apenas uma vez na montagem
-    checkAuth();
+    } else {
+      // No SSR, apenas mostrar o componente
+      setInitialLoading(false);
+    }
   }, []);
 
-  // Remover verificação contínua para evitar o piscar
-  // useEffect(() => {
-  //   if (isMounted && isAuthenticated && typeof window !== 'undefined') {
-  //     window.location.href = '/dashboard';
-  //   }
-  // }, [isAuthenticated, isMounted]);
-
+  // Função para submeter o formulário
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -85,15 +85,15 @@ const LoginPage = () => {
     if (hasError) return;
     
     try {
+      // Tentativa de login - o redirecionamento ocorre no AuthContext
       await login(email, password);
-      // O redirecionamento é feito pelo contexto de autenticação
     } catch (error) {
       console.error('Erro no login:', error);
     }
   };
 
-  // Se o componente ainda não foi montado, mostra um loader
-  if (!isMounted) {
+  // Mostrar loading enquanto verifica a autenticação inicial
+  if (initialLoading) {
     return (
       <Flex
         minH={'100vh'}
@@ -106,6 +106,7 @@ const LoginPage = () => {
     );
   }
 
+  // Renderizar o formulário de login
   return (
     <Flex
       minH={'100vh'}
@@ -172,7 +173,7 @@ const LoginPage = () => {
                 <FormErrorMessage>Senha é obrigatória</FormErrorMessage>
               )}
             </FormControl>
-            <Stack spacing={10}>
+            <Stack spacing={10} pt={4}>
               <Button
                 type="submit"
                 bg={'brand.500'}

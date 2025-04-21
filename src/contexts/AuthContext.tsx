@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useToast } from '@chakra-ui/react';
-import { useRouter } from 'next/router';
 
+// Interface para o usuário
 interface User {
   id: string;
   name: string;
@@ -9,6 +9,7 @@ interface User {
   role: string;
 }
 
+// Interface para o contexto de autenticação
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -17,7 +18,7 @@ interface AuthContextType {
   logout: () => void;
 }
 
-// Default context with dummy implementation
+// Default context com implementação vazia
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isAuthenticated: false,
@@ -32,15 +33,16 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Chaves usadas no localStorage
+const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const toast = useToast();
-  
-  // Safe router usage - initialize only when in browser
-  const router = typeof window !== 'undefined' ? useRouter() : null;
 
-  // Verificar se o usuário está autenticado ao carregar a página
+  // Inicialização - carregar usuário do localStorage se existir
   useEffect(() => {
     // Skip during SSR
     if (typeof window === 'undefined') {
@@ -49,27 +51,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Usar nomes de chaves mais simples para evitar problemas
-      const token = localStorage.getItem('auth_token');
-      const storedUser = localStorage.getItem('auth_user');
+      const token = localStorage.getItem(TOKEN_KEY);
+      const storedUser = localStorage.getItem(USER_KEY);
 
       if (token && storedUser) {
         setUser(JSON.parse(storedUser));
       }
     } catch (error) {
-      console.error('Error restoring auth state:', error);
+      console.error('Erro ao restaurar estado de autenticação:', error);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  // Função de login - simples e direta
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     
     try {
-      // Simulando autenticação - em produção, faça uma chamada API real
+      // Apenas para demonstração - em produção, fazer uma chamada API real
       if (email === 'admin@viralizamos.com' && password === 'admin123') {
-        // Simulando resposta da API com token e dados do usuário
+        // Dados simulados de resposta
         const token = 'fake-jwt-token';
         const userData: User = {
           id: '1',
@@ -78,19 +80,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           role: 'admin',
         };
         
-        // Salvar token e usuário no localStorage com nomes mais simples
-        if (typeof window !== 'undefined') {
-          // Limpar qualquer valor anterior
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('auth_user');
-          
-          // Definir novos valores
-          localStorage.setItem('auth_token', token);
-          localStorage.setItem('auth_user', JSON.stringify(userData));
-        }
+        // Salvar no localStorage
+        localStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(USER_KEY, JSON.stringify(userData));
         
+        // Atualizar estado
         setUser(userData);
         
+        // Feedback para o usuário
         toast({
           title: 'Login realizado com sucesso!',
           status: 'success',
@@ -99,17 +96,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           position: 'top-right',
         });
 
-        // Usar redirecionamento direto para ir para o dashboard
-        if (typeof window !== 'undefined') {
-          // Redirecionamento direto e abrupto, que é mais confiável 
-          // do que aguardar a atualização do estado
-          window.location.href = '/dashboard';
-          return; // Retornar para evitar processamento adicional
-        }
+        // Redirecionamento - simples e direto
+        window.location.href = '/dashboard';
+        return;
       } else {
         throw new Error('Credenciais inválidas');
       }
     } catch (error) {
+      // Feedback de erro
       toast({
         title: 'Erro ao fazer login',
         description: error instanceof Error ? error.message : 'Tente novamente mais tarde',
@@ -119,26 +113,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         position: 'top-right',
       });
       
+      // Limpar dados de autenticação em caso de erro
       setUser(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
-      }
-    } finally {
-      // Só marca como concluído se nenhum redirecionamento ocorreu
-      if (typeof window !== 'undefined' && window.location.pathname !== '/dashboard') {
-        setIsLoading(false);
-      }
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      
+      // Finalizar loading
+      setIsLoading(false);
     }
   };
 
+  // Função de logout - simples e direta
   const logout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
-    }
+    // Limpar localStorage
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    
+    // Atualizar estado
     setUser(null);
     
+    // Feedback para o usuário
     toast({
       title: 'Logout realizado',
       status: 'info',
@@ -147,12 +141,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       position: 'top-right',
     });
     
-    // Redirecionamento direto para a página de login
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
+    // Redirecionamento
+    window.location.href = '/login';
   };
 
+  // Provider do contexto
   return (
     <AuthContext.Provider
       value={{
