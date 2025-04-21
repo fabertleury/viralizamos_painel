@@ -28,20 +28,39 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isEmailError, setIsEmailError] = useState(false);
   const [isPasswordError, setIsPasswordError] = useState(false);
-  const { login, isLoading, isAuthenticated } = useAuth();
+  const { login, isLoading, isAuthenticated, user } = useAuth();
   const toast = useToast();
 
   // Verificar se o componente foi montado
   useEffect(() => {
     setIsMounted(true);
+    
+    // Verificar autenticação no localStorage para evitar ciclos de redirecionamento
+    const checkAuth = () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const token = localStorage.getItem('auth_token');
+          const storedUser = localStorage.getItem('auth_user');
+          
+          if (token && storedUser) {
+            window.location.href = '/dashboard';
+          }
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+      }
+    };
+    
+    // Executar apenas uma vez na montagem
+    checkAuth();
   }, []);
 
-  // Verificar autenticação
-  useEffect(() => {
-    if (isMounted && isAuthenticated && typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
-    }
-  }, [isAuthenticated, isMounted]);
+  // Remover verificação contínua para evitar o piscar
+  // useEffect(() => {
+  //   if (isMounted && isAuthenticated && typeof window !== 'undefined') {
+  //     window.location.href = '/dashboard';
+  //   }
+  // }, [isAuthenticated, isMounted]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,6 +143,7 @@ const LoginPage = () => {
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
               />
               {isEmailError && (
                 <FormErrorMessage>Email é obrigatório</FormErrorMessage>
@@ -136,11 +156,13 @@ const LoginPage = () => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
                 />
                 <InputRightElement h={'full'}>
                   <Button
                     variant={'ghost'}
                     onClick={() => setShowPassword((show) => !show)}
+                    aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
                   >
                     {showPassword ? <ViewIcon /> : <ViewOffIcon />}
                   </Button>

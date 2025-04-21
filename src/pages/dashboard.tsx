@@ -22,33 +22,47 @@ interface Atividade {
   data: string;
 }
 
-// Envolva o componente em um carregamento dinâmico para evitar problemas de hidratação
+// Componente de Dashboard protegido por autenticação
 const DashboardPage = () => {
   const [isMounted, setIsMounted] = useState(false);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
-  // Usar GraphQL para buscar dados
+  // Verificar autenticação no localStorage também para garantir consistência
+  const [isLocalStorageAuthenticated, setIsLocalStorageAuthenticated] = useState(false);
+  
+  // Verificar autenticação local
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkLocalAuth = () => {
+        const token = localStorage.getItem('auth_token');
+        const user = localStorage.getItem('auth_user');
+        setIsLocalStorageAuthenticated(!!token && !!user);
+      };
+      
+      checkLocalAuth();
+      setIsMounted(true);
+      
+      // Se não estiver autenticado, redirecionar para login
+      const token = localStorage.getItem('auth_token');
+      const user = localStorage.getItem('auth_user');
+      if (!token || !user) {
+        window.location.href = '/login';
+      }
+    }
+  }, []);
+  
+  // Determinar se realmente está autenticado usando ambas as fontes de verdade
+  const isActuallyAuthenticated = isAuthenticated || isLocalStorageAuthenticated;
+  
+  // Usar GraphQL para buscar dados apenas se estiver autenticado
   const { loading, error, data } = useQuery(GET_DASHBOARD_DATA, {
-    // Pular consulta se não estiver autenticado
-    skip: !isAuthenticated || !isMounted,
+    skip: !isActuallyAuthenticated || !isMounted || authLoading,
   });
   
   const dashboardData = data?.dadosDashboard || null;
   
-  // Efeito para verificar se o componente está montado
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-  
-  // Redirecionar se não estiver autenticado
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated && typeof window !== 'undefined' && isMounted) {
-      window.location.href = '/login';
-    }
-  }, [isAuthenticated, authLoading, isMounted]);
-
-  // Se não estiver montado ainda, não renderize nada para evitar erros de hidratação
-  if (!isMounted) {
+  // Mostrar estado de carregamento se qualquer uma das condições de carregamento for verdadeira
+  if (!isMounted || authLoading || (!isActuallyAuthenticated && !isLocalStorageAuthenticated)) {
     return (
       <AdminLayout>
         <Box p={5} textAlign="center">
@@ -57,6 +71,14 @@ const DashboardPage = () => {
         </Box>
       </AdminLayout>
     );
+  }
+  
+  // Redirecionar se não estiver autenticado
+  if (!isActuallyAuthenticated && isMounted && !authLoading) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    return null;
   }
 
   // Configuração do gráfico de transações
@@ -145,7 +167,7 @@ const DashboardPage = () => {
 
   // Renderizar o conteúdo do dashboard
   const renderDashboard = () => {
-    if (loading || authLoading) {
+    if (loading) {
       return (
         <div className="p-4">
           <div className="h-10 w-48 bg-gray-200 rounded mb-6 animate-pulse"></div>

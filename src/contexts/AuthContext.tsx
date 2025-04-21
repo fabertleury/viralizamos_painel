@@ -99,13 +99,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           position: 'top-right',
         });
 
-        // Usar setTimeout para garantir que o estado seja atualizado antes do redirecionamento
-        setTimeout(() => {
-          // Redirecionamento com window.location para garantir um reload completo
-          if (typeof window !== 'undefined') {
-            window.location.href = '/dashboard';
-          }
-        }, 300);
+        // Usar redirecionamento direto para ir para o dashboard
+        if (typeof window !== 'undefined') {
+          // Redirecionamento direto e abrupto, que é mais confiável 
+          // do que aguardar a atualização do estado
+          window.location.href = '/dashboard';
+          return; // Retornar para evitar processamento adicional
+        }
       } else {
         throw new Error('Credenciais inválidas');
       }
@@ -125,7 +125,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.removeItem('auth_user');
       }
     } finally {
-      setIsLoading(false);
+      // Só marca como concluído se nenhum redirecionamento ocorreu
+      if (typeof window !== 'undefined' && window.location.pathname !== '/dashboard') {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -144,12 +147,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       position: 'top-right',
     });
     
-    // Usar o mesmo padrão de redirecionamento do login
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-    }, 300);
+    // Redirecionamento direto para a página de login
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   };
 
   return (

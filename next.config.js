@@ -29,8 +29,11 @@ const nextConfig = {
   compiler: {
     // Remover todos os console.log em produção
     removeConsole: process.env.NODE_ENV === 'production',
+    // Desativar use de eval - maior segurança e melhor compatibilidade com CSP
+    reactRemoveProperties: true,
+    styledComponents: true,
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     if (!isServer) {
       // Não tente processar esses módulos no lado do cliente
       config.resolve.fallback = {
@@ -42,6 +45,18 @@ const nextConfig = {
         child_process: false,
         crypto: false
       };
+      
+      // Desativar o uso de eval no desenvolvimento e produção
+      if (!dev) {
+        config.optimization.minimizer.forEach((plugin) => {
+          if (plugin.constructor.name === 'TerserPlugin') {
+            plugin.options.terserOptions.compress.drop_console = true;
+            plugin.options.terserOptions.compress.pure_funcs = ['console.log'];
+            // Desativar evaluate para evitar uso de eval
+            plugin.options.terserOptions.compress.evaluate = false;
+          }
+        });
+      }
     }
     return config;
   },
