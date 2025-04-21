@@ -38,6 +38,7 @@
     "dotenv": "^16.5.0",
     "framer-motion": "^10.16.16",
     "graphql": "^16.8.1",
+    "jose": "^6.0.10",
     "json-format": "^1.0.1",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.286.0",
@@ -57,7 +58,7 @@
   },
   "devDependencies": {
     "@types/micro-cors": "^0.1.5",
-    "@types/node": "^20.8.2",
+    "@types/node": "^20.17.30",
     "@types/pg": "^8.11.13",
     "@types/react": "^18.2.25",
     "@types/react-dom": "^18.2.10",
