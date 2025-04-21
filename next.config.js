@@ -2,12 +2,12 @@
 const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
-  output: 'standalone',
+  output: 'export',
+  distDir: 'out',
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
   poweredByHeader: false,
-  // Desativar SSG completamente para evitar problemas com router
-  staticPageGenerationTimeout: 1000,
   images: {
+    unoptimized: true,
     domains: [
       'localhost',
       'viralizamos.com',
@@ -54,15 +54,6 @@ const nextConfig = {
     NEXT_PUBLIC_PAINEL_URL: process.env.NEXT_PUBLIC_PAINEL_URL,
     NEXT_PUBLIC_PAGAMENTOS_API_URL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL,
     NEXT_PUBLIC_ORDERS_API_URL: process.env.NEXT_PUBLIC_ORDERS_API_URL
-  },
-  // API routes
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: '/api/:path*',
-      }
-    ];
   },
   // Ignora erros de prerender em rotas específicas
   experimental: {

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/router';
 import { useToast } from '@chakra-ui/react';
+import { useRouter } from 'next/router';
 
 interface User {
   id: string;
@@ -34,15 +34,8 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isMounted, setIsMounted] = useState(false);
-  
-  const router = useRouter();
   const toast = useToast();
-
-  // Verificar se o componente está montado (cliente)
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const router = useRouter();
 
   // Verificar se o usuário está autenticado ao carregar a página
   useEffect(() => {
@@ -52,34 +45,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
-    const checkAuth = async () => {
-      try {
-        // Simulando verificação de token - em produção, verifique com uma API
-        const token = localStorage.getItem('auth_token');
-        
-        if (token) {
-          // Simulando dados do usuário - em produção, busque da API
-          const userData: User = {
-            id: '1',
-            name: 'Administrador',
-            email: 'admin@viralizamos.com',
-            role: 'admin',
-          };
-          
-          setUser(userData);
-        }
-      } catch (error) {
-        console.error('Erro ao verificar autenticação:', error);
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth_token');
-        }
-        setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    try {
+      const token = localStorage.getItem('viralizamos.token');
+      const storedUser = localStorage.getItem('viralizamos.user');
 
-    checkAuth();
+      if (token && storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (error) {
+      console.error('Error restoring auth state:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -97,10 +74,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           role: 'admin',
         };
         
-        // Salvar token e usuário
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_token', token);
-        }
+        // Salvar token e usuário no localStorage
+        localStorage.setItem('viralizamos.token', token);
+        localStorage.setItem('viralizamos.user', JSON.stringify(userData));
         setUser(userData);
         
         toast({
@@ -110,11 +86,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isClosable: true,
           position: 'top-right',
         });
-        
-        // Usar window.location para redirecionamento
-        if (typeof window !== 'undefined') {
-          window.location.href = '/dashboard';
-        }
+
+        // Usar window.location.href para garantir um redirecionamento completo
+        window.location.href = '/dashboard';
       } else {
         throw new Error('Credenciais inválidas');
       }
@@ -130,7 +104,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       setUser(null);
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
+        localStorage.removeItem('viralizamos.token');
+        localStorage.removeItem('viralizamos.user');
       }
     } finally {
       setIsLoading(false);
@@ -139,14 +114,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem('viralizamos.token');
+      localStorage.removeItem('viralizamos.user');
     }
     setUser(null);
-    
-    // Usar window.location para redirecionamento
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
     
     toast({
       title: 'Logout realizado',
@@ -155,6 +126,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       isClosable: true,
       position: 'top-right',
     });
+    
+    // Usar window.location.href para garantir um redirecionamento completo
+    window.location.href = '/login';
   };
 
   return (

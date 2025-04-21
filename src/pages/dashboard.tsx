@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/router';
 import { useQuery } from '@apollo/client';
 import { GET_DASHBOARD_DATA } from '../graphql/queries';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +11,7 @@ import { formatCurrency, formatDate } from '../utils/format';
 // Importação dinâmica dos componentes de gráfico para evitar problemas de SSR
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
-// At the top of the file, add this interface:
+// Interface para dados de atividade
 interface Atividade {
   id: string;
   tipo: string;
@@ -24,7 +23,6 @@ interface Atividade {
 
 export default function Dashboard() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const router = useRouter();
   
   // Usar GraphQL para buscar dados
   const { loading, error, data } = useQuery(GET_DASHBOARD_DATA);
@@ -32,10 +30,8 @@ export default function Dashboard() {
   
   // Redirecionar se não estiver autenticado
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
+    if (!authLoading && !isAuthenticated && typeof window !== 'undefined') {
+      window.location.href = '/login';
     }
   }, [isAuthenticated, authLoading]);
 

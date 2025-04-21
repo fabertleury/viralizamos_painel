@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -12,14 +12,12 @@ import {
   useToast,
   FormErrorMessage,
 } from '@chakra-ui/react';
-import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
 import Head from 'next/head';
 
 export default function AdicionarAdmin() {
   const { user, isLoading } = useAuth();
-  const router = useRouter();
   const toast = useToast();
 
   const [formData, setFormData] = useState({
@@ -33,14 +31,14 @@ export default function AdicionarAdmin() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirecionar se não estiver autenticado
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isLoading && !user && typeof window !== 'undefined') {
-      router.replace('/login');
+      window.location.href = '/login';
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading]);
 
   // Verificar se o usuário é administrador
-  React.useEffect(() => {
+  useEffect(() => {
     if (user && user.role !== 'admin' && typeof window !== 'undefined') {
       toast({
         title: 'Acesso negado',
@@ -49,9 +47,9 @@ export default function AdicionarAdmin() {
         duration: 5000,
         isClosable: true,
       });
-      router.replace('/dashboard');
+      window.location.href = '/dashboard';
     }
-  }, [user, router, toast]);
+  }, [user, toast]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

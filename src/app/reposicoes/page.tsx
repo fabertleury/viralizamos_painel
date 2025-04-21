@@ -55,7 +55,6 @@ import { FiRefreshCw, FiSearch, FiEdit, FiCheck, FiX, FiEye, FiPlus } from 'reac
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { buscarReposicoes, criarReposicao, processarReposicaoManual, atualizarStatusReposicao, buscarEstatisticasReposicoes } from '@/services/reposicoesService';
-import { useRouter } from 'next/navigation';
 import { useRef } from 'react';
 
 // Componente para exibir o status da reposição
@@ -141,7 +140,6 @@ export default function ReposicoesPage() {
   const [processando, setProcessando] = useState(false);
   
   const toast = useToast();
-  const router = useRouter();
 
   // Carregar reposições e estatísticas
   useEffect(() => {
@@ -201,7 +199,9 @@ export default function ReposicoesPage() {
 
   // Função para ir para a página de detalhes
   const verDetalhes = (id: string) => {
-    router.push(`/reposicoes/${id}`);
+    if (typeof window !== 'undefined') {
+      window.location.href = `/reposicoes/${id}`;
+    }
   };
 
   // Função para criar nova reposição
