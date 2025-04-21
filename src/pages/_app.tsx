@@ -1,6 +1,5 @@
 import type { AppProps } from 'next/app';
 import { ChakraProvider } from '@chakra-ui/react';
-import { AuthProvider } from '../contexts/AuthContext';
 import { ApolloProvider } from '../providers/ApolloProvider';
 import '../styles/globals.css';
 import { useEffect, useState } from 'react';
@@ -31,9 +30,7 @@ function MyApp({ Component, pageProps }: AppProps) {
     <ClientOnly>
       <ChakraProvider>
         <ApolloProvider>
-          <AuthProvider>
-            <Component {...pageProps} />
-          </AuthProvider>
+          <Component {...pageProps} />
         </ApolloProvider>
       </ChakraProvider>
     </ClientOnly>

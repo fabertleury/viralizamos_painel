@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useQuery } from '@apollo/client';
 import { GET_DASHBOARD_DATA } from '../graphql/queries';
-import { useAuth } from '../contexts/AuthContext';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -22,63 +21,65 @@ interface Atividade {
   data: string;
 }
 
-// Componente de Dashboard protegido por autenticação
-const DashboardPage = () => {
-  const [isMounted, setIsMounted] = useState(false);
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+// Componente Dashboard simplificado
+function Dashboard() {
+  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  // Verificar autenticação no localStorage também para garantir consistência
-  const [isLocalStorageAuthenticated, setIsLocalStorageAuthenticated] = useState(false);
-  
-  // Verificar autenticação local
+  // Verificar autenticação
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const checkLocalAuth = () => {
+    const checkAuth = () => {
+      try {
         const token = localStorage.getItem('auth_token');
         const user = localStorage.getItem('auth_user');
-        setIsLocalStorageAuthenticated(!!token && !!user);
-      };
-      
-      checkLocalAuth();
-      setIsMounted(true);
-      
-      // Se não estiver autenticado, redirecionar para login
-      const token = localStorage.getItem('auth_token');
-      const user = localStorage.getItem('auth_user');
-      if (!token || !user) {
-        window.location.href = '/login';
+        
+        if (token && user) {
+          setIsAuthenticated(true);
+        } else {
+          // Não está autenticado, redirecionar para login
+          window.location.replace('/login');
+        }
+      } catch (error) {
+        console.error('Erro ao verificar autenticação:', error);
+        // Em caso de erro, redirecionar para login
+        window.location.replace('/login');
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+    
+    // Verificar autenticação imediatamente
+    checkAuth();
   }, []);
   
-  // Determinar se realmente está autenticado usando ambas as fontes de verdade
-  const isActuallyAuthenticated = isAuthenticated || isLocalStorageAuthenticated;
-  
-  // Usar GraphQL para buscar dados apenas se estiver autenticado
-  const { loading, error, data } = useQuery(GET_DASHBOARD_DATA, {
-    skip: !isActuallyAuthenticated || !isMounted || authLoading,
+  // Usar GraphQL para buscar dados apenas quando autenticado
+  const { loading: dataLoading, error, data } = useQuery(GET_DASHBOARD_DATA, {
+    skip: !isAuthenticated,
   });
   
   const dashboardData = data?.dadosDashboard || null;
   
-  // Mostrar estado de carregamento se qualquer uma das condições de carregamento for verdadeira
-  if (!isMounted || authLoading || (!isActuallyAuthenticated && !isLocalStorageAuthenticated)) {
+  // Mostrar loading enquanto verifica autenticação
+  if (loading) {
     return (
       <AdminLayout>
         <Box p={5} textAlign="center">
           <Spinner size="xl" />
-          <Text mt={4}>Carregando...</Text>
+          <Text mt={4}>Verificando autenticação...</Text>
         </Box>
       </AdminLayout>
     );
   }
   
-  // Redirecionar se não estiver autenticado
-  if (!isActuallyAuthenticated && isMounted && !authLoading) {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-    return null;
+  // Garantir que só carregue se autenticado
+  if (!isAuthenticated) {
+    return (
+      <AdminLayout>
+        <Box p={5} textAlign="center">
+          <Text>Redirecionando para login...</Text>
+        </Box>
+      </AdminLayout>
+    );
   }
 
   // Configuração do gráfico de transações
@@ -167,7 +168,7 @@ const DashboardPage = () => {
 
   // Renderizar o conteúdo do dashboard
   const renderDashboard = () => {
-    if (loading) {
+    if (dataLoading) {
       return (
         <div className="p-4">
           <div className="h-10 w-48 bg-gray-200 rounded mb-6 animate-pulse"></div>
@@ -358,9 +359,9 @@ const DashboardPage = () => {
   };
 
   return <AdminLayout>{renderDashboard()}</AdminLayout>;
-};
+}
 
-// Export do componente usando dynamic para evitar erros de SSR
-export default dynamic(() => Promise.resolve(DashboardPage), {
+// Export como componente dinâmico para evitar erros de SSR
+export default dynamic(() => Promise.resolve(Dashboard), {
   ssr: false
 }); 

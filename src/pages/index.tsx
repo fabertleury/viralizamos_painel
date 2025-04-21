@@ -1,22 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Box, Flex, Spinner, Text } from '@chakra-ui/react';
-import dynamic from 'next/dynamic';
 
-// Componente principal
-const HomePage = () => {
-  const [isMounted, setIsMounted] = useState(false);
-  
+// Componente de redirecionamento simples
+export default function Home() {
+  // Verificar se já está logado e redirecionar apropriadamente
   useEffect(() => {
-    setIsMounted(true);
-    // Redirecionar para a página de login usando location.href para evitar problemas com router
     if (typeof window !== 'undefined') {
-      // Adicionar um pequeno delay para garantir que tudo esteja carregado
-      setTimeout(() => {
-        window.location.href = '/login';
-      }, 100);
+      const token = localStorage.getItem('auth_token');
+      const user = localStorage.getItem('auth_user');
+      
+      if (token && user) {
+        // Já está logado, redirecionar para o dashboard
+        window.location.replace('/dashboard');
+      } else {
+        // Não está logado, redirecionar para login
+        window.location.replace('/login');
+      }
     }
   }, []);
 
+  // Mostrar loading enquanto redireciona
   return (
     <Flex 
       justify="center" 
@@ -30,9 +33,4 @@ const HomePage = () => {
       </Box>
     </Flex>
   );
-};
-
-// Exportar como componente dinâmico para evitar erros de hidratação
-export default dynamic(() => Promise.resolve(HomePage), {
-  ssr: false
-}); 
+} 

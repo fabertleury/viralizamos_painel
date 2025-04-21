@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import {
   Box,
   Button,
@@ -19,53 +18,42 @@ import {
   Spinner,
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
-import { useAuth } from '../contexts/AuthContext';
 
-// Componente de login simplificado
-const LoginPage = () => {
-  // Estado local do formulário
+// Login simples sem depender do AuthContext
+export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [isEmailError, setIsEmailError] = useState(false);
   const [isPasswordError, setIsPasswordError] = useState(false);
   
-  // Estado de carregamento inicial
-  const [initialLoading, setInitialLoading] = useState(true);
-  
-  // Context de autenticação
-  const { login, isLoading } = useAuth();
   const toast = useToast();
 
-  // Verificação única ao carregar a página
+  // Verificar se já está logado antes de renderizar a página
   useEffect(() => {
-    // Verificar se já existe uma sessão válida e redirecionar diretamente
-    if (typeof window !== 'undefined') {
+    const checkAuth = () => {
       try {
-        const token = window.localStorage.getItem('auth_token');
-        const user = window.localStorage.getItem('auth_user');
+        const token = localStorage.getItem('auth_token');
+        const user = localStorage.getItem('auth_user');
         
         if (token && user) {
           // Já está logado, redirecionar para o dashboard
-          window.location.href = '/dashboard';
+          window.location.replace('/dashboard');
         }
       } catch (error) {
         console.error('Erro ao verificar autenticação:', error);
-      } finally {
-        // Finalizar o carregamento inicial independentemente do resultado
-        setInitialLoading(false);
       }
-    } else {
-      // No SSR, apenas mostrar o componente
-      setInitialLoading(false);
-    }
+    };
+    
+    checkAuth();
   }, []);
 
-  // Função para submeter o formulário
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Login manual sem context
+  const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validações simples
+    // Validações básicas
     let hasError = false;
     
     if (!email) {
@@ -84,29 +72,49 @@ const LoginPage = () => {
     
     if (hasError) return;
     
+    setIsLoading(true);
+    
     try {
-      // Tentativa de login - o redirecionamento ocorre no AuthContext
-      await login(email, password);
+      // Credenciais hard-coded - apenas para demonstração
+      if (email === 'admin@viralizamos.com' && password === 'admin123') {
+        // Criar dados do usuário
+        const userData = {
+          id: '1',
+          name: 'Administrador',
+          email: 'admin@viralizamos.com',
+          role: 'admin',
+        };
+        
+        // Salvar no localStorage
+        localStorage.setItem('auth_token', 'fake-jwt-token');
+        localStorage.setItem('auth_user', JSON.stringify(userData));
+        
+        toast({
+          title: 'Login realizado com sucesso!',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top-right',
+        });
+        
+        // Redirecionar para o dashboard
+        window.location.href = '/dashboard';
+      } else {
+        throw new Error('Credenciais inválidas');
+      }
     } catch (error) {
-      console.error('Erro no login:', error);
+      toast({
+        title: 'Erro ao fazer login',
+        description: error instanceof Error ? error.message : 'Tente novamente mais tarde',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+        position: 'top-right',
+      });
+      setIsLoading(false);
     }
   };
 
-  // Mostrar loading enquanto verifica a autenticação inicial
-  if (initialLoading) {
-    return (
-      <Flex
-        minH={'100vh'}
-        align={'center'}
-        justify={'center'}
-        bg={useColorModeValue('gray.50', 'gray.800')}
-      >
-        <Spinner size="xl" color="blue.500" />
-      </Flex>
-    );
-  }
-
-  // Renderizar o formulário de login
   return (
     <Flex
       minH={'100vh'}
@@ -135,7 +143,7 @@ const LoginPage = () => {
           boxShadow={'lg'}
           p={8}
           as="form"
-          onSubmit={handleSubmit}
+          onSubmit={handleManualLogin}
         >
           <Stack spacing={4}>
             <FormControl id="email" isRequired isInvalid={isEmailError}>
@@ -188,13 +196,17 @@ const LoginPage = () => {
               </Button>
             </Stack>
           </Stack>
+          
+          <Text fontSize="sm" color="blue.500" mt={6} cursor="pointer" 
+                onClick={() => {
+                  localStorage.removeItem('auth_token');
+                  localStorage.removeItem('auth_user');
+                  window.location.reload();
+                }}>
+            Problemas para entrar? Clique aqui para limpar dados de sessão
+          </Text>
         </Box>
       </Stack>
     </Flex>
   );
-};
-
-// Exportar como componente dinâmico para evitar erros de hidratação
-export default dynamic(() => Promise.resolve(LoginPage), {
-  ssr: false
-}); 
+} 
