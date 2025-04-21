@@ -938,4 +938,16 @@ export async function registrarLogAcesso(
     console.error('Erro ao registrar log de acesso:', error);
     return false;
   }
+}
+
+// Adicionar a função compatível com a antiga implementação
+export async function buscarUsuarioPorId(id: number): Promise<any> {
+  try {
+    // Usar a nova implementação que recebe string
+    const response = await buscarUsuario(id.toString());
+    return response;
+  } catch (error) {
+    console.error(`Erro ao buscar usuário com ID ${id}:`, error);
+    return null;
+  }
 } 
