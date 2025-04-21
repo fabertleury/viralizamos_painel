@@ -2,8 +2,12 @@
 const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
-  output: 'export',
-  distDir: 'out',
+  // Remove static export configuration
+  
+  // Skip any problematic routes during build
+  skipTrailingSlashRedirect: true,
+  skipMiddlewareUrlNormalize: true,
+  
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
   poweredByHeader: false,
   images: {
@@ -54,14 +58,6 @@ const nextConfig = {
     NEXT_PUBLIC_PAINEL_URL: process.env.NEXT_PUBLIC_PAINEL_URL,
     NEXT_PUBLIC_PAGAMENTOS_API_URL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL,
     NEXT_PUBLIC_ORDERS_API_URL: process.env.NEXT_PUBLIC_ORDERS_API_URL
-  },
-  // Ignora erros de prerender em rotas específicas
-  experimental: {
-    // Esta configuração permite ignorar erros durante o build para páginas específicas
-    isrMemoryCacheSize: 0,  // Desabilita o cache de ISR para evitar problemas de memória
-    outputFileTracingExcludes: {
-      '*': ['node_modules', '.git', '.next']
-    }
   },
   // Configuração para ignorar erros durante o build em determinadas páginas
   onDemandEntries: {

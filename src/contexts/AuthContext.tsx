@@ -17,6 +17,7 @@ interface AuthContextType {
   logout: () => void;
 }
 
+// Default context with dummy implementation
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isAuthenticated: false,
@@ -35,7 +36,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const toast = useToast();
-  const router = useRouter();
+  
+  // Safe router usage - initialize only if needed
+  const router = typeof window !== 'undefined' ? useRouter() : null;
 
   // Verificar se o usuário está autenticado ao carregar a página
   useEffect(() => {
