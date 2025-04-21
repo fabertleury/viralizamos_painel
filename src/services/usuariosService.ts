@@ -48,6 +48,16 @@ export interface Usuario {
   data_cadastro: Date;
   ultimo_acesso?: Date;
   foto_perfil?: string;
+  // Propriedades adicionais para estatísticas
+  total_pedidos?: number;
+  total_gasto?: number;
+  servicos_usados?: string[];
+  ultimo_pedido?: {
+    data: Date;
+    produto: string;
+    valor: number;
+    status: string;
+  };
 }
 
 // Função para verificar se o pool está inicializado
@@ -583,75 +593,6 @@ export async function criarUsuarioDetalhado(usuario: {
   } catch (error) {
     console.error('Erro ao criar usuário:', error);
     throw error;
-  }
-}
-
-// Função para atualizar um usuário
-export async function atualizarUsuario(id: string, dados: {
-  nome?: string;
-  email?: string;
-  senha?: string;
-  tipo?: string;
-  avatar_url?: string;
-}): Promise<boolean> {
-  try {
-    if (!pagamentosPool) {
-      throw new Error('Pool de conexão de pagamentos não inicializado');
-    }
-
-    // Montando dinamicamente a query de atualização
-    let setClause = '';
-    const values: any[] = [];
-    let paramCount = 1;
-    
-    if (dados.nome) {
-      setClause += `nome = $${paramCount++}, `;
-      values.push(dados.nome);
-    }
-    
-    if (dados.email) {
-      setClause += `email = $${paramCount++}, `;
-      values.push(dados.email);
-    }
-    
-    if (dados.senha) {
-      setClause += `senha_hash = $${paramCount++}, `;
-      values.push(hashSenha(dados.senha));
-    }
-    
-    if (dados.tipo) {
-      setClause += `tipo = $${paramCount++}, `;
-      values.push(dados.tipo);
-    }
-    
-    if (dados.avatar_url) {
-      setClause += `avatar_url = $${paramCount++}, `;
-      values.push(dados.avatar_url);
-    }
-    
-    // Adicionar atualizado_em
-    setClause += `atualizado_em = NOW()`;
-    
-    // Se não houver dados para atualizar
-    if (values.length === 0) {
-      return false;
-    }
-    
-    const query = `
-      UPDATE usuarios
-      SET ${setClause}
-      WHERE id = $${paramCount}
-      RETURNING id
-    `;
-    
-    values.push(id);
-    
-    const result = await pagamentosPool.query(query, values);
-    
-    return result && result.rows.length > 0;
-  } catch (error) {
-    console.error(`Erro ao atualizar usuário ${id}:`, error);
-    throw new Error(`Erro ao atualizar usuário ${id}`);
   }
 }
 

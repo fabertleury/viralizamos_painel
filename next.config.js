@@ -62,6 +62,12 @@ const nextConfig = {
         });
       }
     }
+    
+    // Ignorar warnings específicos relacionados a propriedades não existentes em tipos
+    config.infrastructureLogging = {
+      level: 'error', // Reduzir logs de infraestrutura para apenas mostrar erros
+    };
+    
     return config;
   },
   // Ignora todos os erros de ESLint durante o build para simplificar o processo
