@@ -346,5 +346,5 @@ function Dashboard() {
 
 // Export como componente dinâmico para evitar erros de SSR
 export default dynamic(() => Promise.resolve(Dashboard), {
-  ssr: false
+  ssr: false,
 }); 

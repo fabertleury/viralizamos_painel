@@ -2,7 +2,12 @@
 const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
-  // Remove static export configuration
+  
+  // Configure for both App Router and Pages Router
+  experimental: {
+    appDir: true,
+    serverComponentsExternalPackages: ['@prisma/client'],
+  },
   
   // Skip any problematic routes during build
   skipTrailingSlashRedirect: true,
