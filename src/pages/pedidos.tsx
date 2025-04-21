@@ -261,7 +261,7 @@ export default function Pedidos() {
     }
   };
   
-  // Função para visualizar detalhes do pedido
+  // Função para visualizar detalhes de um pedido
   const verDetalhesPedido = (id: string) => {
     router.push(`/pedidos/${id}`);
   };

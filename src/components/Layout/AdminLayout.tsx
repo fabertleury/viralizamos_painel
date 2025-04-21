@@ -12,7 +12,10 @@ import {
   Menu as MenuIcon,
   ChevronDown,
   X,
-  RefreshCw
+  RefreshCw,
+  FileText,
+  UserPlus,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
@@ -31,6 +34,9 @@ const LinkItems: Array<LinkItemProps> = [
   { name: 'Pedidos', icon: ShoppingCart, href: '/pedidos' },
   { name: 'Reposições', icon: RefreshCw, href: '/reposicoes' },
   { name: 'Usuários', icon: Users, href: '/usuarios' },
+  { name: 'Logs', icon: AlertCircle, href: '/logs' },
+  { name: 'Documentação API', icon: FileText, href: '/api-docs' },
+  { name: 'Adicionar Admin', icon: UserPlus, href: '/admin/adicionar' },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

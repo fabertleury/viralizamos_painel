@@ -137,9 +137,6 @@ export default function Login() {
                 Entrar
               </Button>
             </Stack>
-            <Text mt={4} textAlign="center" fontSize="sm" color="gray.500">
-              Para fins de teste, use: admin@viralizamos.com / admin123
-            </Text>
           </Stack>
         </Box>
       </Stack>

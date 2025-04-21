@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/router';
 import { useToast } from '@chakra-ui/react';
 
 interface User {
@@ -104,7 +104,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           position: 'top-right',
         });
         
-        router.push('/dashboard');
+        // Usar replace em vez de push para evitar problemas de histórico
+        router.replace('/dashboard');
       } else {
         throw new Error('Credenciais inválidas');
       }
@@ -132,7 +133,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.removeItem('auth_token');
     }
     setUser(null);
-    router.push('/login');
+    // Usar replace em vez de push para evitar problemas de histórico
+    router.replace('/login');
     
     toast({
       title: 'Logout realizado',

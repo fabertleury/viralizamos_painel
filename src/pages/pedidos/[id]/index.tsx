@@ -355,9 +355,9 @@ const PedidoDetalhes: React.FC = () => {
               </HStack>
             </Flex>
             
-            <Grid templateColumns={{ base: '1fr', lg: 'repeat(3, 1fr)' }} gap={6}>
+            <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap={6}>
               {/* Coluna da esquerda - Dados do pedido */}
-              <GridItem colSpan={{ base: 1, lg: 2 }}>
+              <GridItem>
                 <Card>
                   <CardHeader>
                     <Flex justify="space-between" align="center">
@@ -390,32 +390,36 @@ const PedidoDetalhes: React.FC = () => {
                       </Stat>
                       
                       <Stat>
-                        <StatLabel>Quantidade</StatLabel>
-                        <StatNumber fontSize="md" display="flex" alignItems="center">
-                          <Icon as={FiBarChart2} mr={2} />
-                          {pedido.quantidade?.toLocaleString() || '0'}
-                        </StatNumber>
-                      </Stat>
-                      
-                      <Stat>
                         <StatLabel>Valor</StatLabel>
                         <StatNumber fontSize="md" display="flex" alignItems="center">
                           <Icon as={FiDollarSign} mr={2} />
                           {formatarValor(pedido.amount)}
                         </StatNumber>
                       </Stat>
+                      
+                      {pedido.quantidade && (
+                        <Stat>
+                          <StatLabel>Quantidade</StatLabel>
+                          <StatNumber fontSize="md" display="flex" alignItems="center">
+                            <Icon as={FiBarChart2} mr={2} />
+                            {pedido.quantidade}
+                          </StatNumber>
+                        </Stat>
+                      )}
                     </Grid>
                     
                     <Divider my={6} />
                     
-                    {/* Seção de transação */}
-                    <Heading size="sm" mb={4}>Dados da Transação</Heading>
+                    {/* Informações da transação associada */}
+                    <Heading size="sm" mb={4}>Detalhes da Transação</Heading>
                     
                     {pedido.transacao_id ? (
                       <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={6}>
                         <Stat>
                           <StatLabel>ID da Transação</StatLabel>
-                          <StatNumber fontSize="md">{pedido.transacao_id}</StatNumber>
+                          <StatNumber fontSize="md" fontFamily="mono">
+                            {pedido.transacao_id}
+                          </StatNumber>
                         </Stat>
                         
                         {pedido.transacao_detalhes && (
@@ -423,22 +427,18 @@ const PedidoDetalhes: React.FC = () => {
                             <Stat>
                               <StatLabel>Status do Pagamento</StatLabel>
                               <StatNumber fontSize="md">
-                                <Badge colorScheme={
-                                  pedido.transacao_detalhes.status === 'approved' ? 'green' : 
-                                  pedido.transacao_detalhes.status === 'pending' ? 'yellow' : 'red'
-                                }>
-                                  {pedido.transacao_detalhes.status === 'approved' ? 'Aprovado' : 
-                                   pedido.transacao_detalhes.status === 'pending' ? 'Pendente' : 'Recusado'}
-                                </Badge>
+                                {renderStatus(pedido.transacao_detalhes.status)}
                               </StatNumber>
                             </Stat>
                             
-                            <Stat>
-                              <StatLabel>Método de Pagamento</StatLabel>
-                              <StatNumber fontSize="md">
-                                {pedido.transacao_detalhes.metodo_pagamento || 'N/A'}
-                              </StatNumber>
-                            </Stat>
+                            {pedido.transacao_detalhes.metodo_pagamento && (
+                              <Stat>
+                                <StatLabel>Método de Pagamento</StatLabel>
+                                <StatNumber fontSize="md">
+                                  {pedido.transacao_detalhes.metodo_pagamento}
+                                </StatNumber>
+                              </Stat>
+                            )}
                             
                             {pedido.transacao_detalhes.data_pagamento && (
                               <Stat>
@@ -479,11 +479,9 @@ const PedidoDetalhes: React.FC = () => {
                     {/* Resposta da API se houver */}
                     {pedido.api_response && (
                       <Box mt={6}>
-                        <Heading size="sm" mb={2}>
-                          Resposta da API
-                        </Heading>
+                        <Heading size="sm" mb={2}>Resposta da API</Heading>
                         <Box 
-                          p={4} 
+                          p={3} 
                           bg="gray.50" 
                           borderRadius="md" 
                           fontFamily="mono" 
@@ -491,16 +489,14 @@ const PedidoDetalhes: React.FC = () => {
                           maxH="200px"
                           overflowY="auto"
                         >
-                          <pre>{typeof pedido.api_response === 'string' 
-                            ? pedido.api_response 
-                            : JSON.stringify(pedido.api_response, null, 2)}</pre>
+                          <pre>{JSON.stringify(pedido.api_response, null, 2)}</pre>
                         </Box>
                       </Box>
                     )}
                   </CardBody>
                 </Card>
                 
-                {/* Histórico do pedido, se houver */}
+                {/* Histórico do pedido se houver */}
                 {pedido.historico && pedido.historico.length > 0 && (
                   <Card mt={6}>
                     <CardHeader>
@@ -562,22 +558,24 @@ const PedidoDetalhes: React.FC = () => {
                       
                       <Box>
                         <Text fontWeight="bold">ID do Cliente</Text>
-                        <Text fontFamily="mono">{pedido.cliente_id}</Text>
+                        <Text fontFamily="mono">{pedido.cliente_id || 'N/A'}</Text>
                       </Box>
                       
-                      <Button
-                        as={Link}
-                        href={`/usuarios/${pedido.cliente_id}`}
-                        colorScheme="brand"
-                        variant="outline"
-                        width="full"
-                        mt={2}
-                      >
-                        Ver Perfil do Cliente
-                      </Button>
+                      {pedido.cliente_id && (
+                        <Button
+                          as={Link}
+                          href={`/usuarios/${pedido.cliente_id}`}
+                          colorScheme="brand"
+                          variant="outline"
+                          width="full"
+                          mt={2}
+                        >
+                          Ver Perfil do Cliente
+                        </Button>
+                      )}
                       
                       {/* Botão para gerar recibo (apenas quando o pagamento está aprovado) */}
-                      {pedido.transacao_detalhes && pedido.transacao_detalhes.status === 'approved' && (
+                      {['completed', 'completo', 'success'].includes(pedido.status?.toLowerCase() || '') && (
                         <Button
                           as="a"
                           href={`/api/pedidos/${pedido.id}/receipt`}
@@ -632,11 +630,12 @@ const PedidoDetalhes: React.FC = () => {
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Confirmar Reenvio
+              Reenviar Pedido
             </AlertDialogHeader>
 
             <AlertDialogBody>
-              Tem certeza que deseja reenviar este pedido? Esta ação irá tentar processar o pedido novamente.
+              Tem certeza que deseja reenviar este pedido para processamento?
+              Isso criará uma nova tentativa de execução no provedor.
             </AlertDialogBody>
 
             <AlertDialogFooter>
@@ -644,7 +643,7 @@ const PedidoDetalhes: React.FC = () => {
                 Cancelar
               </Button>
               <Button 
-                colorScheme="blue" 
+                colorScheme="brand" 
                 onClick={reenviarPedido} 
                 ml={3}
                 isLoading={isProcessing}
