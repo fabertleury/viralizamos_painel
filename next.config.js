@@ -5,7 +5,6 @@ const nextConfig = {
   
   // Configure for both App Router and Pages Router
   experimental: {
-    appDir: true,
     serverComponentsExternalPackages: ['@prisma/client'],
   },
   
