@@ -1,49 +1,16 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { buscarUsuariosDetalhados, testarConexaoDB } from '../../../services/usuariosService';
+import axios from 'axios';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Método não permitido' });
   }
 
-  // Verifica se está em fase de build e retorna dados simulados
-  if (process.env.NEXT_PHASE === 'phase-production-build') {
-    console.log('API /usuarios - Pulando execução durante build');
-    return res.status(200).json({ 
-      usuarios: gerarUsuariosMockados(10),
-      total: 10,
-      mock: true
-    });
-  }
-
+  // Log inicial para depuração
+  console.log('API /usuarios - Iniciando processamento da requisição');
+  
   try {
-    // Verificar se a URL do banco de dados está configurada
-    if (!process.env.PAGAMENTOS_DATABASE_URL) {
-      console.error('PAGAMENTOS_DATABASE_URL não está configurada');
-      
-      // Responder com dados mockados
-      return res.status(200).json({ 
-        usuarios: gerarUsuariosMockados(10),
-        total: 10,
-        mock: true,
-        error: 'URL do banco de dados não configurada'
-      });
-    }
-
-    // Testar conexão com o banco de dados
-    const conexaoOK = await testarConexaoDB();
-    if (!conexaoOK) {
-      console.error('Não foi possível estabelecer conexão com o banco de dados');
-      
-      // Responder com dados mockados
-      return res.status(200).json({ 
-        usuarios: gerarUsuariosMockados(10),
-        total: 10,
-        mock: true,
-        error: 'Falha na conexão com o banco de dados'
-      });
-    }
-
+    // Extrair parâmetros da requisição
     const { 
       tipo, 
       status, 
@@ -52,80 +19,139 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       limite = '10' 
     } = req.query;
 
-    console.log(`API /usuarios - Parâmetros: tipo=${tipo}, status=${status}, pagina=${pagina}, limite=${limite}`);
+    console.log(`API /usuarios - Parâmetros: tipo=${tipo}, status=${status}, termoBusca=${termoBusca}, pagina=${pagina}, limite=${limite}`);
 
-    const filtros: any = {};
+    // Configuração dos endpoints dos microserviços
+    const pagamentosApiUrl = process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api';
+    const ordersApiUrl = process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com/api';
     
+    // Chaves de API para autenticação
+    const pagamentosApiKey = process.env.PAYMENTS_API_KEY || '';
+    const ordersApiKey = process.env.ORDERS_API_KEY || '';
+
+    console.log(`API /usuarios - Usando endpoints: Pagamentos=${pagamentosApiUrl}, Orders=${ordersApiUrl}`);
+
+    // Buscar os usuários diretamente do microserviço de pagamentos
+    const queryParams = new URLSearchParams();
+    
+    // Adicionar filtros aos parâmetros de consulta
     if (tipo && tipo !== 'todos') {
-      filtros.tipo = tipo;
+      queryParams.append('role', tipo as string);
     }
     
     if (status && status !== 'todos') {
-      filtros.status = status;
+      queryParams.append('active', status === 'ativo' ? 'true' : 'false');
     }
     
     if (termoBusca) {
-      filtros.termoBusca = termoBusca;
+      queryParams.append('search', termoBusca as string);
     }
     
-    const resultado = await buscarUsuariosDetalhados(
-      filtros,
-      parseInt(pagina as string),
-      parseInt(limite as string)
-    );
+    // Adicionar parâmetros de paginação
+    queryParams.append('page', pagina as string);
+    queryParams.append('limit', limite as string);
     
-    console.log(`API /usuarios - Resultado obtido com sucesso: ${resultado.total} usuários encontrados`);
-    res.status(200).json(resultado);
-  } catch (error) {
-    console.error('Erro ao buscar usuários:', error);
-    if (error instanceof Error) {
-      console.error(`Detalhes do erro: ${error.message}`);
-      console.error(`Stack trace: ${error.stack}`);
+    console.log(`API /usuarios - Preparando requisição para ${pagamentosApiUrl}/admin/users/list`);
+    
+    // Fazer requisição para o microserviço de pagamentos
+    const usuariosResponse = await axios.get(`${pagamentosApiUrl}/admin/users/list?${queryParams.toString()}`, {
+      headers: {
+        'Authorization': `ApiKey ${pagamentosApiKey}`
+      },
+      timeout: 8000 // 8 segundos de timeout para não bloquear a UI
+    });
+    
+    console.log(`API /usuarios - Resposta do microserviço de pagamentos: status=${usuariosResponse.status}`);
+    
+    // Dados base dos usuários
+    const usuariosData = usuariosResponse.data || {};
+    const usuarios = usuariosData.users || [];
+    const total = usuariosData.total || 0;
+    
+    // Mapear os dados para o formato esperado pelo frontend
+    let usuariosMapeados = usuarios.map((user: any) => ({
+      id: user.id,
+      nome: user.name || 'Sem nome',
+      email: user.email,
+      telefone: user.phone || 'Não informado',
+      tipo: user.role || 'cliente',
+      ativo: user.active !== undefined ? user.active : true,
+      data_criacao: user.created_at,
+      ultimo_acesso: user.last_login || null,
+      total_gasto: 0, // Será preenchido com dados do microserviço de orders
+      total_pedidos: 0, // Será preenchido com dados do microserviço de orders
+      ultimo_pedido: null, // Será preenchido com dados do microserviço de orders
+      servicos_usados: [] // Será preenchido com dados do microserviço de orders
+    }));
+    
+    // Se houver usuários, buscar informações complementares de pedidos
+    if (usuariosMapeados.length > 0) {
+      try {
+        // Obter os emails de todos os usuários
+        const emails = usuariosMapeados.map(user => user.email);
+        
+        console.log(`API /usuarios - Buscando informações de pedidos para ${emails.length} usuários`);
+        
+        // Buscar estatísticas de pedidos de todos os usuários
+        const pedidosResponse = await axios.post(`${ordersApiUrl}/stats/users/orders`, {
+          emails: emails
+        }, {
+          headers: {
+            'Authorization': `Bearer ${ordersApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 8000 // 8 segundos de timeout
+        });
+        
+        console.log(`API /usuarios - Resposta do microserviço de orders: status=${pedidosResponse.status}`);
+        
+        // Dados de pedidos por email
+        const pedidosPorEmail = pedidosResponse.data || {};
+        
+        // Complementar os dados de usuários com as informações de pedidos
+        usuariosMapeados = usuariosMapeados.map(usuario => {
+          const dadosPedidos = pedidosPorEmail[usuario.email] || {};
+          
+          return {
+            ...usuario,
+            total_gasto: dadosPedidos.total_gasto || 0,
+            total_pedidos: dadosPedidos.total_pedidos || 0,
+            ultimo_pedido: dadosPedidos.ultimo_pedido || null,
+            servicos_usados: dadosPedidos.servicos || []
+          };
+        });
+      } catch (ordersError) {
+        console.error('API /usuarios - Erro ao buscar dados de pedidos:', ordersError);
+        // Continuar mesmo se não conseguir buscar dados de pedidos
+      }
     }
     
-    // Responder com dados mockados em caso de erro
+    console.log(`API /usuarios - Retornando ${usuariosMapeados.length} usuários`);
+    
+    // Retornar os dados completos
     return res.status(200).json({
-      usuarios: gerarUsuariosMockados(10),
-      total: 10,
-      mock: true,
-      error_message: error instanceof Error ? error.message : 'Erro desconhecido'
+      usuarios: usuariosMapeados,
+      total: total,
+      pagina: parseInt(pagina as string),
+      limite: parseInt(limite as string),
+      paginas: Math.ceil(total / parseInt(limite as string))
+    });
+  } catch (error) {
+    console.error('API /usuarios - Erro ao buscar dados dos microserviços:', error);
+    
+    // Detalhes do erro para logging
+    if (error instanceof Error) {
+      console.error(`API /usuarios - Mensagem: ${error.message}`);
+      if (axios.isAxiosError(error)) {
+        console.error(`API /usuarios - Status: ${error.response?.status}`);
+        console.error(`API /usuarios - Dados: ${JSON.stringify(error.response?.data)}`);
+      }
+    }
+    
+    // Retornar erro 500 - Agora sem fallback para dados mockados
+    return res.status(500).json({ 
+      error: 'Erro ao buscar dados dos usuários',
+      message: error instanceof Error ? error.message : 'Erro desconhecido'
     });
   }
-}
-
-// Função para gerar usuários mockados para exibição quando o banco de dados estiver indisponível
-function gerarUsuariosMockados(quantidade: number) {
-  const tipos = ['admin', 'cliente'];
-  const nomes = ['João Silva', 'Maria Oliveira', 'Carlos Santos', 'Ana Lima', 'Pedro Rocha', 'Fernanda Costa'];
-  
-  return Array.from({ length: quantidade }).map((_, i) => {
-    const nome = nomes[i % nomes.length];
-    const email = `${nome.toLowerCase().replace(' ', '.')}@exemplo.com`;
-    const tipo = tipos[i % 2];
-    const dataBase = new Date();
-    dataBase.setDate(dataBase.getDate() - Math.floor(Math.random() * 365));
-    const ultimoAcesso = new Date();
-    ultimoAcesso.setDate(ultimoAcesso.getDate() - Math.floor(Math.random() * 30));
-    
-    return {
-      id: `mock-${Date.now()}-${i}`,
-      nome,
-      email,
-      telefone: `(11) 9${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
-      tipo,
-      ativo: Math.random() > 0.2,
-      data_criacao: dataBase.toISOString(),
-      ultimo_acesso: ultimoAcesso.toISOString(),
-      total_gasto: Math.floor(Math.random() * 10000) / 100,
-      total_pedidos: Math.floor(Math.random() * 20),
-      ultimo_pedido: {
-        data: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toISOString(),
-        valor: Math.floor(Math.random() * 1000) / 100,
-        status: ['pendente', 'processando', 'completo', 'falha'][Math.floor(Math.random() * 4)],
-        produto: ['Likes Instagram', 'Seguidores Instagram', 'Views TikTok', 'Inscritos YouTube'][Math.floor(Math.random() * 4)]
-      },
-      servicos_usados: ['Likes Instagram', 'Seguidores Instagram'],
-      is_mock: true
-    };
-  });
 } 
