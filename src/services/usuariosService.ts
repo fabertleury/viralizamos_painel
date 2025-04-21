@@ -730,24 +730,23 @@ export interface FiltroUsuarios {
 export const buscarUsuarios = async (filtros: FiltroUsuarios = {}) => {
   try {
     // Primeiro buscamos no sistema de pagamentos (dados básicos)
-    const response = await pagamentosApi.get('/usuarios', { 
+    const response = await pagamentosApi.get('/users', { 
       params: {
-        tipo: filtros.tipo,
-        status: filtros.status,
-        q: filtros.termoBusca,
-        pagina: filtros.pagina || 1,
-        limite: filtros.limite || 10
+        page: filtros.pagina || 1,
+        limit: filtros.limite || 10,
+        email: filtros.termoBusca,
+        role: filtros.tipo !== 'todos' ? filtros.tipo : undefined
       }
     });
 
     // Se tivermos usuários, enriquecemos com dados do sistema de pedidos
-    if (response.data.usuarios && response.data.usuarios.length > 0) {
+    if (response.data.data && response.data.data.length > 0) {
       // Para cada usuário, buscamos os dados complementares
       const usuariosEnriquecidos = await Promise.all(
-        response.data.usuarios.map(async (usuario: Usuario) => {
+        response.data.data.map(async (usuario: Usuario) => {
           try {
             // Buscamos métricas de compras no sistema de pedidos
-            const metricasResponse = await ordersApi.get(`/usuarios/${usuario.id}/metricas`);
+            const metricasResponse = await ordersApi.get(`/admin/users/${usuario.id}/stats`);
             
             // Combinamos os dados
             return {
@@ -764,13 +763,18 @@ export const buscarUsuarios = async (filtros: FiltroUsuarios = {}) => {
 
       return {
         usuarios: usuariosEnriquecidos,
-        total: response.data.total,
-        pagina: response.data.pagina,
-        totalPaginas: response.data.totalPaginas
+        total: response.data.pagination.total,
+        pagina: response.data.pagination.page,
+        totalPaginas: response.data.pagination.pages
       };
     }
 
-    return response.data;
+    return {
+      usuarios: response.data.data || [],
+      total: response.data.pagination?.total || 0,
+      pagina: response.data.pagination?.page || 1,
+      totalPaginas: response.data.pagination?.pages || 1
+    };
   } catch (error) {
     console.error('Erro ao buscar usuários:', error);
     throw new Error(handleApiError(error));
@@ -780,7 +784,7 @@ export const buscarUsuarios = async (filtros: FiltroUsuarios = {}) => {
 // Buscar detalhes de um usuário específico
 export const buscarUsuario = async (id: string) => {
   try {
-    const response = await pagamentosApi.get(`/usuarios/${id}`);
+    const response = await pagamentosApi.get(`/users/${id}`);
     return response.data;
   } catch (error) {
     console.error(`Erro ao buscar usuário ${id}:`, error);
@@ -791,7 +795,7 @@ export const buscarUsuario = async (id: string) => {
 // Buscar métricas do usuário
 export const buscarMetricasUsuario = async (id: string) => {
   try {
-    const response = await ordersApi.get(`/usuarios/${id}/metricas`);
+    const response = await ordersApi.get(`/admin/users/${id}/stats`);
     return response.data;
   } catch (error) {
     console.error(`Erro ao buscar métricas do usuário ${id}:`, error);
@@ -802,8 +806,8 @@ export const buscarMetricasUsuario = async (id: string) => {
 // Buscar histórico de compras do usuário
 export const buscarHistoricoCompras = async (id: string, pagina = 1, limite = 10) => {
   try {
-    const response = await ordersApi.get(`/usuarios/${id}/pedidos`, {
-      params: { pagina, limite }
+    const response = await ordersApi.get(`/admin/users/${id}/orders`, {
+      params: { page: pagina, limit: limite }
     });
     return response.data;
   } catch (error) {
