@@ -7,11 +7,6 @@ const publicRoutes = ['/login', '/api/auth', '/favicon.ico', '/_next'];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Redirecionar /_not-found para /not-found
-  if (pathname === '/_not-found') {
-    return NextResponse.redirect(new URL('/not-found', request.url));
-  }
-
   // Redirecionar qualquer acesso à página de reposições para o dashboard (temporário)
   if (pathname.startsWith('/reposicoes')) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
@@ -40,7 +35,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/',
-    '/_not-found',
     '/reposicoes/:path*',
     '/painel/:path*',
     '/dashboard/:path*',
