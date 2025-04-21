@@ -2,211 +2,138 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
-  Flex,
   FormControl,
   FormLabel,
-  Heading,
   Input,
   Stack,
-  Text,
-  useColorModeValue,
-  InputGroup,
-  InputRightElement,
+  Heading,
+  Container,
   FormErrorMessage,
-  useToast,
+  useColorModeValue,
+  Flex,
   Image,
-  Spinner,
 } from '@chakra-ui/react';
-import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
+import { useRouter } from 'next/router';
+import { useAuth } from '../contexts/AuthContext';
+import Cookies from 'js-cookie';
 
-// Login simples sem depender do AuthContext
-export default function LoginPage() {
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isEmailError, setIsEmailError] = useState(false);
-  const [isPasswordError, setIsPasswordError] = useState(false);
-  
-  const toast = useToast();
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { login, isAuthenticated } = useAuth();
+  const router = useRouter();
 
-  // Verificar se já está logado antes de renderizar a página
+  // Redirecionar se estiver autenticado
   useEffect(() => {
-    const checkAuth = () => {
-      try {
-        const token = localStorage.getItem('auth_token');
-        const user = localStorage.getItem('auth_user');
-        
-        if (token && user) {
-          // Já está logado, redirecionar para o dashboard
-          window.location.replace('/dashboard');
-        }
-      } catch (error) {
-        console.error('Erro ao verificar autenticação:', error);
-      }
-    };
-    
-    checkAuth();
-  }, []);
+    // Se já estiver autenticado, redireciona para o dashboard
+    const token = Cookies.get('auth_token');
+    if (token) {
+      router.replace('/dashboard');
+    }
+  }, [isAuthenticated, router]);
 
-  // Login manual sem context
-  const handleManualLogin = async (e: React.FormEvent) => {
+  const validateForm = () => {
+    let isValid = true;
+
+    // Validar email
+    if (!email) {
+      setEmailError('Email é obrigatório');
+      isValid = false;
+    } else {
+      setEmailError('');
+    }
+
+    // Validar senha
+    if (!password) {
+      setPasswordError('Senha é obrigatória');
+      isValid = false;
+    } else {
+      setPasswordError('');
+    }
+
+    return isValid;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validações básicas
-    let hasError = false;
-    
-    if (!email) {
-      setIsEmailError(true);
-      hasError = true;
-    } else {
-      setIsEmailError(false);
+    if (!validateForm()) {
+      return;
     }
-    
-    if (!password) {
-      setIsPasswordError(true);
-      hasError = true;
-    } else {
-      setIsPasswordError(false);
-    }
-    
-    if (hasError) return;
-    
-    setIsLoading(true);
+
+    setIsSubmitting(true);
     
     try {
-      // Credenciais hard-coded - apenas para demonstração
-      if (email === 'admin@viralizamos.com' && password === 'admin123') {
-        // Criar dados do usuário
-        const userData = {
-          id: '1',
-          name: 'Administrador',
-          email: 'admin@viralizamos.com',
-          role: 'admin',
-        };
-        
-        // Salvar no localStorage
-        localStorage.setItem('auth_token', 'fake-jwt-token');
-        localStorage.setItem('auth_user', JSON.stringify(userData));
-        
-        toast({
-          title: 'Login realizado com sucesso!',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-          position: 'top-right',
-        });
-        
-        // Redirecionar para o dashboard
-        window.location.href = '/dashboard';
-      } else {
-        throw new Error('Credenciais inválidas');
-      }
+      await login(email, password);
+      // Não precisamos de redirecionamento aqui, o contexto de autenticação já cuida disso
     } catch (error) {
-      toast({
-        title: 'Erro ao fazer login',
-        description: error instanceof Error ? error.message : 'Tente novamente mais tarde',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-        position: 'top-right',
-      });
-      setIsLoading(false);
+      console.error('Erro no login:', error);
+      // Erros são tratados pelo contexto de autenticação
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const bgColor = useColorModeValue('white', 'gray.700');
+
   return (
-    <Flex
-      minH={'100vh'}
-      align={'center'}
-      justify={'center'}
-      bg={useColorModeValue('gray.50', 'gray.800')}
-    >
-      <Stack spacing={8} mx={'auto'} maxW={'lg'} py={12} px={6}>
-        <Stack align={'center'}>
-          <Box textAlign="center" mb={4}>
-            <Image 
-              src="/logo.png" 
-              alt="Viralizamos Logo" 
-              height="60px"
-              fallbackSrc="https://placehold.co/180x60/3182CE/FFFFFF?text=Viralizamos"
-            />
-          </Box>
-          <Heading fontSize={'4xl'} color={'brand.500'}>Painel Administrativo</Heading>
-          <Text fontSize={'lg'} color={'gray.600'}>
-            Acesse para gerenciar o sistema
-          </Text>
+    <Container maxW="lg" py={{ base: '12', md: '24' }} px={{ base: '0', sm: '8' }}>
+      <Stack spacing="8">
+        <Stack spacing="6" textAlign="center">
+          <Flex justify="center" mb={4}>
+            <Image src="/logo.png" alt="Viralizamos Logo" width="200px" />
+          </Flex>
+          <Heading size="lg" fontWeight="600">
+            Login - Painel Administrativo
+          </Heading>
         </Stack>
         <Box
-          rounded={'lg'}
-          bg={useColorModeValue('white', 'gray.700')}
-          boxShadow={'lg'}
-          p={8}
-          as="form"
-          onSubmit={handleManualLogin}
+          py={{ base: '0', sm: '8' }}
+          px={{ base: '4', sm: '10' }}
+          bg={bgColor}
+          boxShadow={{ base: 'none', sm: 'md' }}
+          borderRadius={{ base: 'none', sm: 'xl' }}
         >
-          <Stack spacing={4}>
-            <FormControl id="email" isRequired isInvalid={isEmailError}>
-              <FormLabel>Email</FormLabel>
-              <Input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
-              {isEmailError && (
-                <FormErrorMessage>Email é obrigatório</FormErrorMessage>
-              )}
-            </FormControl>
-            <FormControl id="password" isRequired isInvalid={isPasswordError}>
-              <FormLabel>Senha</FormLabel>
-              <InputGroup>
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
-                <InputRightElement h={'full'}>
-                  <Button
-                    variant={'ghost'}
-                    onClick={() => setShowPassword((show) => !show)}
-                    aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
-                  >
-                    {showPassword ? <ViewIcon /> : <ViewOffIcon />}
-                  </Button>
-                </InputRightElement>
-              </InputGroup>
-              {isPasswordError && (
-                <FormErrorMessage>Senha é obrigatória</FormErrorMessage>
-              )}
-            </FormControl>
-            <Stack spacing={10} pt={4}>
+          <form onSubmit={handleSubmit}>
+            <Stack spacing="6">
+              <Stack spacing="5">
+                <FormControl isInvalid={!!emailError}>
+                  <FormLabel htmlFor="email">Email</FormLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                  <FormErrorMessage>{emailError}</FormErrorMessage>
+                </FormControl>
+                <FormControl isInvalid={!!passwordError}>
+                  <FormLabel htmlFor="password">Senha</FormLabel>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <FormErrorMessage>{passwordError}</FormErrorMessage>
+                </FormControl>
+              </Stack>
               <Button
                 type="submit"
-                bg={'brand.500'}
-                color={'white'}
-                _hover={{
-                  bg: 'brand.600',
-                }}
-                isLoading={isLoading}
-                loadingText="Entrando..."
+                colorScheme="blue"
+                size="lg"
+                fontSize="md"
+                isLoading={isSubmitting}
               >
                 Entrar
               </Button>
             </Stack>
-          </Stack>
-          
-          <Text fontSize="sm" color="blue.500" mt={6} cursor="pointer" 
-                onClick={() => {
-                  localStorage.removeItem('auth_token');
-                  localStorage.removeItem('auth_user');
-                  window.location.reload();
-                }}>
-            Problemas para entrar? Clique aqui para limpar dados de sessão
-          </Text>
+          </form>
         </Box>
       </Stack>
-    </Flex>
+    </Container>
   );
 } 

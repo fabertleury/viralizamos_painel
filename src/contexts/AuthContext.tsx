@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useToast } from '@chakra-ui/react';
+import Cookies from 'js-cookie';
+import { useRouter } from 'next/router';
 
-// Interface para o usuário
+// Interface for User data
 interface User {
   id: string;
   name: string;
@@ -9,149 +11,127 @@ interface User {
   role: string;
 }
 
-// Interface para o contexto de autenticação
-interface AuthContextType {
+// Interface for Authentication Context
+interface AuthContextData {
   user: User | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
+  loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
-// Default context com implementação vazia
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  isAuthenticated: false,
-  isLoading: true,
-  login: async () => {},
-  logout: () => {},
-});
+// Creating context with default values
+export const AuthContext = createContext({} as AuthContextData);
 
-export const useAuth = () => useContext(AuthContext);
-
+// Props for the AuthProvider
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Chaves usadas no localStorage
-const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+// Authentication Provider Component
+export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
   const toast = useToast();
 
-  // Inicialização - carregar usuário do localStorage se existir
+  // Effect to check if user is already authenticated
   useEffect(() => {
-    // Skip during SSR
-    if (typeof window === 'undefined') {
-      setIsLoading(false);
-      return;
-    }
+    // Load user data from cookies
+    const token = Cookies.get('auth_token');
+    const userData = Cookies.get('auth_user');
 
-    try {
-      const token = localStorage.getItem(TOKEN_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
-
-      if (token && storedUser) {
-        setUser(JSON.parse(storedUser));
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } catch (error) {
+        // If parsing fails, clear cookies
+        Cookies.remove('auth_token');
+        Cookies.remove('auth_user');
       }
-    } catch (error) {
-      console.error('Erro ao restaurar estado de autenticação:', error);
-    } finally {
-      setIsLoading(false);
     }
+    
+    setLoading(false);
   }, []);
 
-  // Função de login - simples e direta
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
-    
+  // Login function
+  async function login(email: string, password: string) {
     try {
-      // Apenas para demonstração - em produção, fazer uma chamada API real
-      if (email === 'admin@viralizamos.com' && password === 'admin123') {
-        // Dados simulados de resposta
-        const token = 'fake-jwt-token';
-        const userData: User = {
-          id: '1',
-          name: 'Administrador',
-          email: 'admin@viralizamos.com',
-          role: 'admin',
-        };
-        
-        // Salvar no localStorage
-        localStorage.setItem(TOKEN_KEY, token);
-        localStorage.setItem(USER_KEY, JSON.stringify(userData));
-        
-        // Atualizar estado
-        setUser(userData);
-        
-        // Feedback para o usuário
-        toast({
-          title: 'Login realizado com sucesso!',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-          position: 'top-right',
-        });
-
-        // Redirecionamento - simples e direto
-        window.location.href = '/dashboard';
-        return;
-      } else {
-        throw new Error('Credenciais inválidas');
+      setLoading(true);
+      
+      // Call login API
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Falha na autenticação');
       }
-    } catch (error) {
-      // Feedback de erro
+      
+      // Save data in cookies
+      Cookies.set('auth_token', data.token, { expires: 7 });
+      Cookies.set('auth_user', JSON.stringify(data.user), { expires: 7 });
+      
+      // Update state
+      setUser(data.user);
+      
+      // Show success message
       toast({
-        title: 'Erro ao fazer login',
-        description: error instanceof Error ? error.message : 'Tente novamente mais tarde',
+        title: 'Login realizado com sucesso',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      
+      // Redirect to dashboard
+      router.replace('/dashboard');
+    } catch (error: any) {
+      toast({
+        title: 'Erro de autenticação',
+        description: error.message || 'Credenciais inválidas',
         status: 'error',
         duration: 3000,
         isClosable: true,
-        position: 'top-right',
       });
-      
-      // Limpar dados de autenticação em caso de erro
-      setUser(null);
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-      
-      // Finalizar loading
-      setIsLoading(false);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  // Função de logout - simples e direta
-  const logout = () => {
-    // Limpar localStorage
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+  // Logout function
+  function logout() {
+    // Clear cookies
+    Cookies.remove('auth_token');
+    Cookies.remove('auth_user');
     
-    // Atualizar estado
+    // Clear state
     setUser(null);
     
-    // Feedback para o usuário
+    // Show success message
     toast({
-      title: 'Logout realizado',
+      title: 'Logout realizado com sucesso',
       status: 'info',
       duration: 3000,
       isClosable: true,
-      position: 'top-right',
     });
     
-    // Redirecionamento
-    window.location.href = '/login';
-  };
+    // Redirect to login page
+    router.replace('/login');
+  }
 
-  // Provider do contexto
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: !!user,
-        isLoading,
+        loading,
         login,
         logout,
       }}
@@ -159,4 +139,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
+}
+
+// Hook to use auth context
+export const useAuth = () => {
+  return useContext(AuthContext);
 }; 

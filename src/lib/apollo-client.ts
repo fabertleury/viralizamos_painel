@@ -21,14 +21,22 @@ const httpLink = createHttpLink({
 
 // Adicionar o token de autenticação a todas as requisições
 const authLink = setContext((_, { headers }) => {
-  // Obter o token de autenticação do localStorage
+  // Get token from cookies instead of localStorage
   let token = null;
   
   if (typeof window !== 'undefined') {
-    token = localStorage.getItem('auth_token'); // Ajustado para usar a mesma chave que o AuthContext
+    // Use cookies to match the AuthContext approach
+    const getCookie = (name) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return null;
+    };
+    
+    token = getCookie('auth_token');
   }
   
-  // Retornar os headers com o token
+  // Return the headers with the token
   return {
     headers: {
       ...headers,

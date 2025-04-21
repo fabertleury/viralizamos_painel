@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { formatCurrency, formatDate } from '../utils/format';
 import { Box, Spinner, Text } from '@chakra-ui/react';
+import { useRouter } from 'next/router';
 
 // Importação dinâmica dos componentes de gráfico para evitar problemas de SSR
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -24,38 +25,31 @@ interface Atividade {
 // Componente Dashboard simplificado
 function Dashboard() {
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const router = useRouter();
   
-  // Verificar autenticação
+  // Verificar autenticação diretamente
   useEffect(() => {
-    const checkAuth = () => {
-      try {
-        const token = localStorage.getItem('auth_token');
-        const user = localStorage.getItem('auth_user');
-        
-        if (token && user) {
-          setIsAuthenticated(true);
-        } else {
-          // Não está autenticado, redirecionar para login
-          window.location.replace('/login');
-        }
-      } catch (error) {
-        console.error('Erro ao verificar autenticação:', error);
-        // Em caso de erro, redirecionar para login
-        window.location.replace('/login');
-      } finally {
-        setLoading(false);
-      }
+    // Função para obter valor de cookie
+    const getCookie = (name) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return null;
     };
     
-    // Verificar autenticação imediatamente
-    checkAuth();
-  }, []);
+    const token = getCookie('auth_token') || localStorage.getItem('auth_token');
+    
+    if (!token) {
+      // Não autenticado, redirecionar imediatamente para login
+      router.replace('/login');
+    } else {
+      // Autenticado, carregar dashboard
+      setLoading(false);
+    }
+  }, [router]);
   
-  // Usar GraphQL para buscar dados apenas quando autenticado
-  const { loading: dataLoading, error, data } = useQuery(GET_DASHBOARD_DATA, {
-    skip: !isAuthenticated,
-  });
+  // Usar GraphQL para buscar dados
+  const { loading: dataLoading, error, data } = useQuery(GET_DASHBOARD_DATA);
   
   const dashboardData = data?.dadosDashboard || null;
   
@@ -65,18 +59,7 @@ function Dashboard() {
       <AdminLayout>
         <Box p={5} textAlign="center">
           <Spinner size="xl" />
-          <Text mt={4}>Verificando autenticação...</Text>
-        </Box>
-      </AdminLayout>
-    );
-  }
-  
-  // Garantir que só carregue se autenticado
-  if (!isAuthenticated) {
-    return (
-      <AdminLayout>
-        <Box p={5} textAlign="center">
-          <Text>Redirecionando para login...</Text>
+          <Text mt={4}>Carregando dashboard...</Text>
         </Box>
       </AdminLayout>
     );
