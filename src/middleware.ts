@@ -12,9 +12,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/not-found', request.url));
   }
 
-  // Redirecionar /reposicoes/page para /reposicoes
-  if (pathname === '/reposicoes/page' || pathname.startsWith('/reposicoes/page/')) {
-    return NextResponse.redirect(new URL('/reposicoes', request.url));
+  // Redirecionar qualquer acesso à página de reposições para o dashboard (temporário)
+  if (pathname.startsWith('/reposicoes')) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   // Se tiver um token no cookie, confirma autenticação
@@ -41,8 +41,7 @@ export const config = {
   matcher: [
     '/',
     '/_not-found',
-    '/reposicoes/page',
-    '/reposicoes/page/:path*',
+    '/reposicoes/:path*',
     '/painel/:path*',
     '/dashboard/:path*',
   ],

@@ -32,7 +32,6 @@ const LinkItems: Array<LinkItemProps> = [
   { name: 'Dashboard', icon: Home, href: '/dashboard' },
   { name: 'Transações', icon: DollarSign, href: '/transacoes' },
   { name: 'Pedidos', icon: ShoppingCart, href: '/pedidos' },
-  { name: 'Reposições', icon: RefreshCw, href: '/reposicoes' },
   { name: 'Usuários', icon: Users, href: '/usuarios' },
   { name: 'Logs', icon: AlertCircle, href: '/logs' },
   { name: 'Documentação API', icon: FileText, href: '/api-docs' },
