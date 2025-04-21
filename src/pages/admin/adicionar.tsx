@@ -34,14 +34,14 @@ export default function AdicionarAdmin() {
 
   // Redirecionar se não estiver autenticado
   React.useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isLoading && !user && typeof window !== 'undefined') {
       router.replace('/login');
     }
   }, [user, isLoading, router]);
 
   // Verificar se o usuário é administrador
   React.useEffect(() => {
-    if (user && user.role !== 'admin') {
+    if (user && user.role !== 'admin' && typeof window !== 'undefined') {
       toast({
         title: 'Acesso negado',
         description: 'Você não tem permissão para acessar esta página',

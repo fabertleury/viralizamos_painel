@@ -5,6 +5,8 @@ const nextConfig = {
   output: 'standalone',
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
   poweredByHeader: false,
+  // Desativar SSG completamente para evitar problemas com router
+  staticPageGenerationTimeout: 1000,
   images: {
     domains: [
       'localhost',
@@ -69,6 +71,13 @@ const nextConfig = {
     outputFileTracingExcludes: {
       '*': ['node_modules', '.git', '.next']
     }
+  },
+  // Configuração para ignorar erros durante o build em determinadas páginas
+  onDemandEntries: {
+    // Período de tempo (em ms) em que a página será mantida no buffer
+    maxInactiveAge: 120 * 1000,
+    // Número de páginas que serão mantidas no buffer
+    pagesBufferLength: 5,
   }
 };
 

@@ -33,9 +33,11 @@ export default function Dashboard() {
   // Redirecionar se não estiver autenticado
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading]);
 
   // Configuração do gráfico de transações
   const transacoesChartOptions = {

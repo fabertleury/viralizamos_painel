@@ -1,8 +1,14 @@
 import type { AppProps } from 'next/app';
 import { ChakraProvider } from '@chakra-ui/react';
-import { AuthProvider } from '../contexts/AuthContext';
+import dynamic from 'next/dynamic';
 import { ApolloProvider } from '../providers/ApolloProvider';
 import '../styles/globals.css';
+
+// Importar o AuthProvider dinamicamente para evitar executá-lo no servidor
+const AuthProviderWithNoSSR = dynamic(
+  () => import('../contexts/AuthContext').then((mod) => mod.AuthProvider),
+  { ssr: false }
+);
 
 // Garantir que as páginas sejam carregadas corretamente
 function isServerSideRendered() {
@@ -18,9 +24,9 @@ function MyApp({ Component, pageProps }: AppProps) {
   return (
     <ApolloProvider>
       <ChakraProvider>
-        <AuthProvider>
+        <AuthProviderWithNoSSR>
           <Component {...pageProps} />
-        </AuthProvider>
+        </AuthProviderWithNoSSR>
       </ChakraProvider>
     </ApolloProvider>
   );

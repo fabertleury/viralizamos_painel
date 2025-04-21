@@ -34,8 +34,15 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+  
   const router = useRouter();
   const toast = useToast();
+
+  // Verificar se o componente está montado (cliente)
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Verificar se o usuário está autenticado ao carregar a página
   useEffect(() => {
@@ -104,8 +111,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           position: 'top-right',
         });
         
-        // Usar replace em vez de push para evitar problemas de histórico
-        router.replace('/dashboard');
+        // Usar window.location para redirecionamento
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard';
+        }
       } else {
         throw new Error('Credenciais inválidas');
       }
@@ -133,8 +142,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.removeItem('auth_token');
     }
     setUser(null);
-    // Usar replace em vez de push para evitar problemas de histórico
-    router.replace('/login');
+    
+    // Usar window.location para redirecionamento
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
     
     toast({
       title: 'Logout realizado',

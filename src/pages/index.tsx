@@ -1,14 +1,13 @@
 import { useEffect } from 'react';
-import { useRouter } from 'next/router';
 import { Box, Flex, Spinner, Text } from '@chakra-ui/react';
 
 export default function Home() {
-  const router = useRouter();
-
   useEffect(() => {
-    // Redirecionar para a página de login
-    router.push('/login');
-  }, [router]);
+    // Redirecionar para a página de login usando location.href para evitar problemas com router
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+  }, []);
 
   return (
     <Flex 
