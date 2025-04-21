@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { generateJwtToken } from '../utils/auth';
 import axios from 'axios';
+import { pagamentosApi, ordersApi, handleApiError } from './api';
 
 // Impede erros durante o processo de build
 const isServerSide = typeof window === 'undefined';
@@ -37,7 +38,17 @@ if (ordersPool) {
 }
 
 // Interface para usuário
-export type Usuario = any;
+export interface Usuario {
+  id: string;
+  nome: string;
+  email: string;
+  telefone?: string;
+  tipo: string;
+  status: boolean;
+  data_cadastro: Date;
+  ultimo_acesso?: Date;
+  foto_perfil?: string;
+}
 
 // Função para verificar se o pool está inicializado
 function verificarPool() {
@@ -752,187 +763,139 @@ function hashSenha(senha: string): string {
 }
 
 // Interface para métricas
-export type MetricasUsuario = any;
+export interface MetricasUsuario {
+  total_gasto: number;
+  quantidade_compras: number;
+  ultima_compra?: Date;
+  servico_mais_comprado?: {
+    nome: string;
+    quantidade: number;
+  };
+  compras_recentes: any[];
+  media_mensal?: number;
+  primeiro_pedido?: Date;
+}
 
+// Tipo de filtro para busca
 export interface FiltroUsuarios {
-  busca?: string;
   tipo?: string;
-  status?: boolean;
-  limite?: number;
+  status?: string;
+  termoBusca?: string;
   pagina?: number;
-  ordenar_por?: string;
-  ordem?: 'ASC' | 'DESC';
+  limite?: number;
 }
 
-export interface ResultadoUsuariosPaginado {
-  usuarios: Usuario[];
-  total: number;
-  pagina: number;
-  limite: number;
-  paginas: number;
-}
-
-/**
- * Busca usuários com filtros
- */
-export async function buscarUsuarios(filtros: FiltroUsuarios = {}): Promise<ResultadoUsuariosPaginado> {
+// Buscar usuários com dados dos dois microsserviços
+export const buscarUsuarios = async (filtros: FiltroUsuarios = {}) => {
   try {
-    if (!pagamentosPool) {
-      throw new Error('Pool de conexão não inicializado');
+    // Primeiro buscamos no sistema de pagamentos (dados básicos)
+    const response = await pagamentosApi.get('/usuarios', { 
+      params: {
+        tipo: filtros.tipo,
+        status: filtros.status,
+        q: filtros.termoBusca,
+        pagina: filtros.pagina || 1,
+        limite: filtros.limite || 10
+      }
+    });
+
+    // Se tivermos usuários, enriquecemos com dados do sistema de pedidos
+    if (response.data.usuarios && response.data.usuarios.length > 0) {
+      // Para cada usuário, buscamos os dados complementares
+      const usuariosEnriquecidos = await Promise.all(
+        response.data.usuarios.map(async (usuario: Usuario) => {
+          try {
+            // Buscamos métricas de compras no sistema de pedidos
+            const metricasResponse = await ordersApi.get(`/usuarios/${usuario.id}/metricas`);
+            
+            // Combinamos os dados
+            return {
+              ...usuario,
+              metricas: metricasResponse.data || {}
+            };
+          } catch (error) {
+            // Se falhar, retornamos o usuário sem as métricas
+            console.error(`Erro ao buscar métricas para usuário ${usuario.id}:`, error);
+            return usuario;
+          }
+        })
+      );
+
+      return {
+        usuarios: usuariosEnriquecidos,
+        total: response.data.total,
+        pagina: response.data.pagina,
+        totalPaginas: response.data.totalPaginas
+      };
     }
 
-    const {
-      busca = '',
-      tipo,
-      status,
-      limite = 10,
-      pagina = 1,
-      ordenar_por = 'nome',
-      ordem = 'ASC'
-    } = filtros;
-
-    const offset = (pagina - 1) * limite;
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    // Construir a query base
-    let query = `
-      SELECT 
-        id, nome, email, tipo, status, telefone, 
-        data_cadastro, ultimo_acesso, foto_perfil,
-        total_gasto, ultima_compra, quantidade_compras
-      FROM usuarios
-      WHERE 1=1
-    `;
-
-    // Adicionar condições baseadas nos filtros
-    if (busca) {
-      query += ` AND (nome ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`;
-      params.push(`%${busca}%`);
-      paramIndex++;
-    }
-
-    if (tipo) {
-      query += ` AND tipo = $${paramIndex}`;
-      params.push(tipo);
-      paramIndex++;
-    }
-
-    if (status !== undefined) {
-      query += ` AND status = $${paramIndex}`;
-      params.push(status);
-      paramIndex++;
-    }
-
-    // Query para contagem total
-    const countQuery = `SELECT COUNT(*) FROM (${query}) AS count`;
-    const countResult = await pagamentosPool.query(countQuery, params);
-    const total = parseInt(countResult.rows[0].count, 10);
-
-    // Adicionar ordenação e paginação
-    query += ` ORDER BY ${ordenar_por} ${ordem} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    params.push(limite, offset);
-
-    const result = await pagamentosPool.query(query, params);
-
-    return {
-      usuarios: result.rows,
-      total,
-      pagina,
-      limite,
-      paginas: Math.ceil(total / limite)
-    };
+    return response.data;
   } catch (error) {
     console.error('Erro ao buscar usuários:', error);
-    
-    // Simulação de dados para desenvolvimento
-    const mockUsuarios = Array.from({ length: 5 }).map((_, i) => ({
-      id: i + 1,
-      nome: `Usuário Teste ${i + 1}`,
-      email: `usuario${i + 1}@teste.com`,
-      tipo: i === 0 ? 'admin' : 'cliente',
-      status: true,
-      data_cadastro: new Date(),
-      total_gasto: Math.random() * 1000,
-      quantidade_compras: Math.floor(Math.random() * 10)
-    }));
-    
-    return {
-      usuarios: mockUsuarios as Usuario[],
-      total: mockUsuarios.length,
-      pagina: 1,
-      limite: 10,
-      paginas: 1
-    };
+    throw new Error(handleApiError(error));
   }
-}
+};
 
-/**
- * Busca um usuário pelo ID
- */
-export async function buscarUsuarioPorId(id: number): Promise<Usuario | null> {
+// Buscar detalhes de um usuário específico
+export const buscarUsuario = async (id: string) => {
   try {
-    if (!pagamentosPool) {
-      throw new Error('Pool de conexão não inicializado');
-    }
-
-    const query = `
-      SELECT 
-        id, nome, email, tipo, status, telefone, 
-        data_cadastro, ultimo_acesso, foto_perfil,
-        total_gasto, ultima_compra, quantidade_compras, metadata
-      FROM usuarios
-      WHERE id = $1
-    `;
-
-    const result = await pagamentosPool.query(query, [id]);
-    
-    if (result.rows.length === 0) {
-      return null;
-    }
-    
-    return result.rows[0];
+    const response = await pagamentosApi.get(`/usuarios/${id}`);
+    return response.data;
   } catch (error) {
-    console.error(`Erro ao buscar usuário com ID ${id}:`, error);
-    return null;
+    console.error(`Erro ao buscar usuário ${id}:`, error);
+    throw new Error(handleApiError(error));
   }
-}
+};
 
-/**
- * Busca as métricas de um usuário
- */
-export async function buscarMetricasUsuario(userId: number): Promise<MetricasUsuario | null> {
+// Buscar métricas do usuário
+export const buscarMetricasUsuario = async (id: string) => {
   try {
-    // Simulação de métricas para desenvolvimento
-    const mockMetricas = {
-      total_gasto: 1289.50,
-      quantidade_compras: 12,
-      ultima_compra: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-      servico_mais_comprado: {
-        nome: 'Curtidas Instagram',
-        quantidade: 8
-      },
-      compras_recentes: Array.from({ length: 5 }).map((_, i) => ({
-        id: `order-${i+1}`,
-        data: new Date(Date.now() - i * 24 * 60 * 60 * 1000),
-        valor: 50 + Math.random() * 200,
-        servico: ['Curtidas Instagram', 'Seguidores Instagram', 'Visualizações TikTok'][Math.floor(Math.random() * 3)],
-        status: ['completo', 'processando', 'pendente', 'falha'][Math.floor(Math.random() * 4)]
-      })),
-      media_mensal: 322.38,
-      primeiro_pedido: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-    };
-    
-    return mockMetricas;
+    const response = await ordersApi.get(`/usuarios/${id}/metricas`);
+    return response.data;
   } catch (error) {
-    console.error('Erro ao buscar métricas do usuário:', error);
-    return null;
+    console.error(`Erro ao buscar métricas do usuário ${id}:`, error);
+    throw new Error(handleApiError(error));
   }
-}
+};
 
-/**
- * Obtém as permissões de um usuário
- */
+// Buscar histórico de compras do usuário
+export const buscarHistoricoCompras = async (id: string, pagina = 1, limite = 10) => {
+  try {
+    const response = await ordersApi.get(`/usuarios/${id}/pedidos`, {
+      params: { pagina, limite }
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Erro ao buscar histórico de compras do usuário ${id}:`, error);
+    throw new Error(handleApiError(error));
+  }
+};
+
+// Atualizar dados do usuário
+export const atualizarUsuario = async (id: string, dados: Partial<Usuario>) => {
+  try {
+    const response = await pagamentosApi.put(`/usuarios/${id}`, dados);
+    return response.data;
+  } catch (error) {
+    console.error(`Erro ao atualizar usuário ${id}:`, error);
+    throw new Error(handleApiError(error));
+  }
+};
+
+// Atualizar senha do usuário
+export const atualizarSenhaUsuario = async (id: string, novaSenha: string) => {
+  try {
+    const response = await pagamentosApi.post(`/usuarios/${id}/senha`, { 
+      novaSenha 
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Erro ao atualizar senha do usuário ${id}:`, error);
+    throw new Error(handleApiError(error));
+  }
+};
+
+// Função para obter permissões de um usuário
 export async function buscarPermissoesUsuario(usuarioId: number): Promise<string[]> {
   try {
     if (!pagamentosPool) {
@@ -954,9 +917,7 @@ export async function buscarPermissoesUsuario(usuarioId: number): Promise<string
   }
 }
 
-/**
- * Atualiza as permissões de um usuário
- */
+// Função para atualizar permissões de um usuário
 export async function atualizarPermissoesUsuario(usuarioId: number, permissoes: string[]): Promise<boolean> {
   try {
     if (!pagamentosPool) {
@@ -1000,9 +961,7 @@ export async function atualizarPermissoesUsuario(usuarioId: number, permissoes: 
   }
 }
 
-/**
- * Registra um log de acesso
- */
+// Função para registrar um log de acesso
 export async function registrarLogAcesso(
   usuarioId: number | null, 
   acao: string, 
@@ -1033,39 +992,5 @@ export async function registrarLogAcesso(
   } catch (error) {
     console.error('Erro ao registrar log de acesso:', error);
     return false;
-  }
-}
-
-/**
- * Busca o histórico de compras de um usuário
- */
-export async function buscarComprasUsuario(userId: string) {
-  try {
-    // Comentado temporariamente por incompatibilidade com o schema
-    /*
-    const pedidos = await prisma.pedido.findMany({
-      where: {
-        usuarioId: userId,
-      },
-      orderBy: {
-        dataCriacao: 'desc',
-      },
-      take: 10,
-    });
-    */
-    
-    // Simulação de compras para desenvolvimento
-    const pedidos = Array.from({ length: 5 }).map((_, i) => ({
-      id: `order-${i+1}`,
-      dataCriacao: new Date(Date.now() - i * 24 * 60 * 60 * 1000),
-      valor: 50 + Math.random() * 200,
-      servico: ['Curtidas Instagram', 'Seguidores Instagram', 'Visualizações TikTok'][Math.floor(Math.random() * 3)],
-      status: ['completo', 'processando', 'pendente', 'falha'][Math.floor(Math.random() * 4)]
-    }));
-    
-    return pedidos;
-  } catch (error) {
-    console.error('Erro ao buscar compras do usuário:', error);
-    return null;
   }
 } 

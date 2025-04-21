@@ -1,6 +1,6 @@
 'use client';
 
-// Configuração para desativar a pré-renderização estática
+// Estas configurações garantem que a página seja dinâmica e não pré-renderizada
 export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
 export const revalidate = 0;
