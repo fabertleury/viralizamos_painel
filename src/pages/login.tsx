@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import {
   Box,
   Button,
@@ -15,20 +16,32 @@ import {
   FormErrorMessage,
   useToast,
   Image,
+  Spinner,
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter } from 'next/router';
 
-export default function Login() {
+const LoginPage = () => {
+  const [isMounted, setIsMounted] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isEmailError, setIsEmailError] = useState(false);
   const [isPasswordError, setIsPasswordError] = useState(false);
-  const { login, isLoading } = useAuth();
-  const router = useRouter();
+  const { login, isLoading, isAuthenticated } = useAuth();
   const toast = useToast();
+
+  // Verificar se o componente foi montado
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Verificar autenticação
+  useEffect(() => {
+    if (isMounted && isAuthenticated && typeof window !== 'undefined') {
+      window.location.href = '/dashboard';
+    }
+  }, [isAuthenticated, isMounted]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,11 +67,25 @@ export default function Login() {
     
     try {
       await login(email, password);
-      // O redirecionamento já é feito no contexto de autenticação
+      // O redirecionamento é feito pelo contexto de autenticação
     } catch (error) {
       console.error('Erro no login:', error);
     }
   };
+
+  // Se o componente ainda não foi montado, mostra um loader
+  if (!isMounted) {
+    return (
+      <Flex
+        minH={'100vh'}
+        align={'center'}
+        justify={'center'}
+        bg={useColorModeValue('gray.50', 'gray.800')}
+      >
+        <Spinner size="xl" color="blue.500" />
+      </Flex>
+    );
+  }
 
   return (
     <Flex
@@ -142,4 +169,9 @@ export default function Login() {
       </Stack>
     </Flex>
   );
-} 
+};
+
+// Exportar como componente dinâmico para evitar erros de hidratação
+export default dynamic(() => Promise.resolve(LoginPage), {
+  ssr: false
+}); 

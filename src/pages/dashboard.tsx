@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useQuery } from '@apollo/client';
 import { GET_DASHBOARD_DATA } from '../graphql/queries';
@@ -7,6 +7,7 @@ import AdminLayout from '../components/Layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { formatCurrency, formatDate } from '../utils/format';
+import { Box, Spinner, Text } from '@chakra-ui/react';
 
 // Importação dinâmica dos componentes de gráfico para evitar problemas de SSR
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -21,19 +22,42 @@ interface Atividade {
   data: string;
 }
 
-export default function Dashboard() {
+// Envolva o componente em um carregamento dinâmico para evitar problemas de hidratação
+const DashboardPage = () => {
+  const [isMounted, setIsMounted] = useState(false);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   // Usar GraphQL para buscar dados
-  const { loading, error, data } = useQuery(GET_DASHBOARD_DATA);
+  const { loading, error, data } = useQuery(GET_DASHBOARD_DATA, {
+    // Pular consulta se não estiver autenticado
+    skip: !isAuthenticated || !isMounted,
+  });
+  
   const dashboardData = data?.dadosDashboard || null;
+  
+  // Efeito para verificar se o componente está montado
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   // Redirecionar se não estiver autenticado
   useEffect(() => {
-    if (!authLoading && !isAuthenticated && typeof window !== 'undefined') {
+    if (!authLoading && !isAuthenticated && typeof window !== 'undefined' && isMounted) {
       window.location.href = '/login';
     }
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, isMounted]);
+
+  // Se não estiver montado ainda, não renderize nada para evitar erros de hidratação
+  if (!isMounted) {
+    return (
+      <AdminLayout>
+        <Box p={5} textAlign="center">
+          <Spinner size="xl" />
+          <Text mt={4}>Carregando...</Text>
+        </Box>
+      </AdminLayout>
+    );
+  }
 
   // Configuração do gráfico de transações
   const transacoesChartOptions = {
@@ -312,4 +336,9 @@ export default function Dashboard() {
   };
 
   return <AdminLayout>{renderDashboard()}</AdminLayout>;
-} 
+};
+
+// Export do componente usando dynamic para evitar erros de SSR
+export default dynamic(() => Promise.resolve(DashboardPage), {
+  ssr: false
+}); 

@@ -37,7 +37,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const toast = useToast();
   
-  // Safe router usage - initialize only if needed
+  // Safe router usage - initialize only when in browser
   const router = typeof window !== 'undefined' ? useRouter() : null;
 
   // Verificar se o usuário está autenticado ao carregar a página
@@ -49,8 +49,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      const token = localStorage.getItem('viralizamos.token');
-      const storedUser = localStorage.getItem('viralizamos.user');
+      // Usar nomes de chaves mais simples para evitar problemas
+      const token = localStorage.getItem('auth_token');
+      const storedUser = localStorage.getItem('auth_user');
 
       if (token && storedUser) {
         setUser(JSON.parse(storedUser));
@@ -77,9 +78,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           role: 'admin',
         };
         
-        // Salvar token e usuário no localStorage
-        localStorage.setItem('viralizamos.token', token);
-        localStorage.setItem('viralizamos.user', JSON.stringify(userData));
+        // Salvar token e usuário no localStorage com nomes mais simples
+        if (typeof window !== 'undefined') {
+          // Limpar qualquer valor anterior
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+          
+          // Definir novos valores
+          localStorage.setItem('auth_token', token);
+          localStorage.setItem('auth_user', JSON.stringify(userData));
+        }
+        
         setUser(userData);
         
         toast({
@@ -90,8 +99,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           position: 'top-right',
         });
 
-        // Usar window.location.href para garantir um redirecionamento completo
-        window.location.href = '/dashboard';
+        // Usar setTimeout para garantir que o estado seja atualizado antes do redirecionamento
+        setTimeout(() => {
+          // Redirecionamento com window.location para garantir um reload completo
+          if (typeof window !== 'undefined') {
+            window.location.href = '/dashboard';
+          }
+        }, 300);
       } else {
         throw new Error('Credenciais inválidas');
       }
@@ -107,8 +121,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       setUser(null);
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('viralizamos.token');
-        localStorage.removeItem('viralizamos.user');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
       }
     } finally {
       setIsLoading(false);
@@ -117,8 +131,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('viralizamos.token');
-      localStorage.removeItem('viralizamos.user');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
     }
     setUser(null);
     
@@ -130,8 +144,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       position: 'top-right',
     });
     
-    // Usar window.location.href para garantir um redirecionamento completo
-    window.location.href = '/login';
+    // Usar o mesmo padrão de redirecionamento do login
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }, 300);
   };
 
   return (

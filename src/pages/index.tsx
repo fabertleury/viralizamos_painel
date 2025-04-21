@@ -1,11 +1,19 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Flex, Spinner, Text } from '@chakra-ui/react';
+import dynamic from 'next/dynamic';
 
-export default function Home() {
+// Componente principal
+const HomePage = () => {
+  const [isMounted, setIsMounted] = useState(false);
+  
   useEffect(() => {
+    setIsMounted(true);
     // Redirecionar para a página de login usando location.href para evitar problemas com router
     if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+      // Adicionar um pequeno delay para garantir que tudo esteja carregado
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 100);
     }
   }, []);
 
@@ -22,4 +30,9 @@ export default function Home() {
       </Box>
     </Flex>
   );
-} 
+};
+
+// Exportar como componente dinâmico para evitar erros de hidratação
+export default dynamic(() => Promise.resolve(HomePage), {
+  ssr: false
+}); 
