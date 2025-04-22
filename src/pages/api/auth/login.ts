@@ -22,37 +22,46 @@ export default async function handler(
       return res.status(400).json({ message: 'Email e senha são obrigatórios' });
     }
 
-    // Call the main API to authenticate the user
-    const apiUrl = process.env.NEXT_PUBLIC_VIRALIZAMOS_API_URL || 'http://localhost:3000';
-    const response = await fetch(`${apiUrl}/api/admin/auth`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
+    console.log(`Tentativa de login para o email: ${email}`);
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return res.status(response.status).json({ 
-        message: errorData.error || 'Falha na autenticação' 
+    // Verificar se o acesso é do administrador
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@viralizamos.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || '7X#pK9@vD2zF5qL!eR8gT$hY3mN6bW';
+
+    // Em produção ou com bypass de autenticação ativado, usar credenciais das variáveis de ambiente
+    if (email === adminEmail && password === adminPassword) {
+      console.log('Login bem-sucedido para o administrador');
+      
+      // Gerar um token de autenticação
+      const tokenPayload = {
+        email: adminEmail,
+        role: 'admin',
+        timestamp: Date.now()
+      };
+
+      // Em produção, usaríamos o JWT_SECRET para assinar o token
+      const token = Buffer.from(JSON.stringify(tokenPayload)).toString('base64');
+      
+      return res.status(200).json({
+        token: token,
+        user: {
+          id: 'admin-user',
+          name: 'Administrador',
+          email: adminEmail,
+          role: 'admin',
+        },
       });
-    }
+    } 
+    
+    // Credenciais inválidas
+    console.log('Credenciais de administrador inválidas');
+    return res.status(401).json({ message: 'Credenciais inválidas' });
 
-    const data = await response.json();
-
-    // Transform the response to match our expected format
-    return res.status(200).json({
-      token: data.session.access_token,
-      user: {
-        id: data.user.id,
-        name: data.user.user_metadata?.name || 'Usuário',
-        email: data.user.email,
-        role: data.user.user_metadata?.role || 'admin',
-      },
-    });
   } catch (error) {
     console.error('Error in login API:', error);
-    return res.status(500).json({ message: 'Erro interno do servidor' });
+    return res.status(500).json({ 
+      message: 'Erro interno do servidor',
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
+    });
   }
 } 
