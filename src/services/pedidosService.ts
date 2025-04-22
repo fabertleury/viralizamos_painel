@@ -58,6 +58,7 @@ export async function testarConexaoDB() {
   if (ordersApiUrl && ordersApiKey) {
     try {
       console.log('Testando conexão com a API de orders...');
+      // Usando o endpoint de health correto
       const response = await axios.get(`${ordersApiUrl}/health`, {
         headers: {
           'Authorization': `Bearer ${ordersApiKey}`
@@ -185,7 +186,9 @@ export async function buscarPedidos(
         params.end_date = filtros.dataFim;
       }
       
-      const response = await axios.get(`${ordersApiUrl}/orders`, {
+      // Usando o endpoint correto para buscar pedidos
+      // A API usa o endpoint /api/orders/find para buscar pedidos
+      const response = await axios.get(`${ordersApiUrl}/orders/find`, {
         params,
         headers: {
           'Authorization': `Bearer ${ordersApiKey}`
@@ -244,7 +247,7 @@ export async function buscarPedidos(
         o.provider_id as provedor_id,
         p.name as provedor_nome,
         o.service_id as produto_id,
-        COALESCE(o.service_name, p.name || ' ' || o.service_type, 'Serviço não especificado') as produto_nome,
+        COALESCE(p.name || ' ' || o.service_type, 'Serviço não especificado') as produto_nome,
         o.quantity as quantidade,
         o.amount as valor,
         o.status,
