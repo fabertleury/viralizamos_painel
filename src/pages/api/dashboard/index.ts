@@ -60,13 +60,16 @@ async function obterEstatisticasPedidos() {
     // Calcular crescimento
     const crescimento = calcularCrescimento(totalAtual, totalAnterior);
     
+    // Valor total em reais
+    const valorTotal = parseFloat(dadosAtual.valor_total || '0');
+    
     return {
       total: totalAtual,
       completados: parseInt(dadosAtual.total_completos || '0'),
       processando: parseInt(dadosAtual.total_processando || '0'),
       pendentes: parseInt(dadosAtual.total_pendentes || '0'),
       falhas: parseInt(dadosAtual.total_falhas || '0'),
-      valorTotal: parseInt(dadosAtual.valor_total || '0'),
+      valorTotal: valorTotal,
       crescimento
     };
   } catch (error) {
@@ -117,12 +120,15 @@ async function obterEstatisticasTransacoes() {
     // Calcular crescimento
     const crescimento = calcularCrescimento(totalAtual, totalAnterior);
     
+    // O valor deve ser fornecido como está - já é o valor real em reais
+    const valorTotal = parseFloat(dadosAtual.valor_total_aprovado || '0');
+    
     return {
       total: totalAtual,
       aprovadas: parseInt(dadosAtual.total_aprovadas || '0'),
       pendentes: parseInt(dadosAtual.total_pendentes || '0'),
       recusadas: parseInt(dadosAtual.total_recusadas || '0'),
-      valorTotal: parseInt(dadosAtual.valor_total_aprovado || '0'),
+      valorTotal: valorTotal,
       crescimento
     };
   } catch (error) {
@@ -238,7 +244,7 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
     return result.rows.map(row => ({
       data: row.data.toISOString().split('T')[0],
       total: parseInt(row.total || '0'),
-      valorAprovado: parseInt(row.valor_aprovado || '0')
+      valorAprovado: parseFloat(row.valor_aprovado || '0')
     }));
   } catch (error) {
     console.error(`Erro ao obter transações por período (${dias} dias):`, error);
@@ -312,7 +318,7 @@ async function obterAtividadesRecentes(limite: number = 10) {
       usuario: p.usuario || 'Não informado',
       item: p.item || 'Pedido ' + p.id,
       status: mapearStatus(p.status),
-      valor: p.valor
+      valor: parseFloat(p.valor || '0')
     }));
     
     // Processar transações
@@ -321,9 +327,9 @@ async function obterAtividadesRecentes(limite: number = 10) {
       tipo: t.tipo,
       data: t.data.toISOString(),
       usuario: t.usuario || 'Não informado',
-      item: t.valor ? `R$ ${(t.valor / 100).toFixed(2)}` : 'Transação ' + t.id,
+      item: t.valor ? `R$ ${parseFloat(t.valor).toFixed(2)}` : 'Transação ' + t.id,
       status: mapearStatus(t.status),
-      valor: t.valor
+      valor: parseFloat(t.valor || '0')
     }));
     
     // Combinar resultados e ordenar por data

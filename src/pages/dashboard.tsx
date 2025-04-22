@@ -57,7 +57,7 @@ const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL'
-  }).format(value / 100); // Convertendo centavos para reais
+  }).format(value); // Valor já está em reais, não precisa dividir por 100
 };
 
 // Formatador de data
@@ -193,7 +193,7 @@ function Dashboard() {
     },
     {
       name: 'Valor (R$)',
-      data: dashboardData.graficos.transacoesPorDia.map(item => item.valorAprovado / 100),
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.valorAprovado),
     },
   ];
 
@@ -282,7 +282,10 @@ function Dashboard() {
                 <Stat>
                   <StatLabel fontSize="sm" color="gray.500">Receita (R$)</StatLabel>
                   <StatNumber fontSize="3xl">
-                    {formatCurrency(dashboardData.estatisticas.transacoes.valorTotal)}
+                    R$ {dashboardData.estatisticas.transacoes.valorTotal.toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
                   </StatNumber>
                   <StatHelpText>
                     <StatArrow type={dashboardData.estatisticas.transacoes.crescimento >= 0 ? 'increase' : 'decrease'} />
