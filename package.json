@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "prebuild": "prisma generate",
+    "prebuild": "node scripts/generate-prisma.js",
     "build:safe": "next build --no-lint",
     "start": "next start",
     "lint": "next lint",
