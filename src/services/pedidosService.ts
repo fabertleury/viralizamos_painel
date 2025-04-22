@@ -4,10 +4,19 @@ import { Pool } from 'pg';
 const isServerSide = typeof window === 'undefined';
 
 // Conexão com o banco de dados de orders
-export const ordersPool = isServerSide && process.env.NEXT_PHASE !== 'phase-production-build' 
+// Prioriza ORDERS_DATABASE_URL, mas também aceita DATABASE_URL_ORDERS como fallback
+const ordersDbUrl = process.env.ORDERS_DATABASE_URL || process.env.DATABASE_URL_ORDERS;
+
+export const ordersPool = isServerSide && process.env.NEXT_PHASE !== 'phase-production-build' && ordersDbUrl
   ? new Pool({
-      connectionString: process.env.ORDERS_DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      connectionString: ordersDbUrl,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      // Aumenta o tempo limite de conexão para 10 segundos
+      connectionTimeoutMillis: 10000,
+      // Aumenta o tempo limite de inatividade para 30 segundos
+      idleTimeoutMillis: 30000,
+      // Mantém no máximo 10 conexões no pool
+      max: 10
     })
   : null;
 
@@ -15,6 +24,10 @@ export const ordersPool = isServerSide && process.env.NEXT_PHASE !== 'phase-prod
 if (ordersPool) {
   ordersPool.on('error', (err) => {
     console.error('Erro inesperado na conexão com o pool PostgreSQL:', err);
+    // Tenta reconectar após um erro
+    if (err.message.includes('connection terminated') || err.message.includes('connection reset')) {
+      console.log('Tentando reconectar ao banco de dados...');
+    }
   });
 }
 

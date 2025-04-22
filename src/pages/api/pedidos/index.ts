@@ -14,8 +14,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Verificar se a URL do banco de dados está configurada
-    if (!process.env.ORDERS_DATABASE_URL) {
-      console.error('ORDERS_DATABASE_URL não está configurada');
+    // Verifica tanto ORDERS_DATABASE_URL quanto DATABASE_URL_ORDERS
+    const dbUrl = process.env.ORDERS_DATABASE_URL || process.env.DATABASE_URL_ORDERS;
+    if (!dbUrl) {
+      console.error('URL do banco de dados de orders não está configurada');
       
       // Responder com dados mockados
       return res.status(200).json({
@@ -101,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 // Função para gerar pedidos mockados para exibição quando o banco de dados estiver indisponível
 function gerarPedidosMockados(quantidade: number) {
-  const status = ['pendente', 'processando', 'completo', 'falha'];
+  const status = ['pendente', 'processando', 'completo', 'falha', 'cancelado', 'parcial'];
   const provedores = ['Provedor A', 'Provedor B', 'Provedor C'];
   const produtos = ['Likes Instagram', 'Seguidores Instagram', 'Views TikTok', 'Inscritos YouTube'];
   
@@ -125,4 +127,4 @@ function gerarPedidosMockados(quantidade: number) {
       is_mock: true
     };
   });
-} 
+}

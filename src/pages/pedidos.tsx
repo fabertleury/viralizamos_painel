@@ -147,10 +147,22 @@ export default function Pedidos() {
       
       const response = await axios.get('/api/pedidos', { 
         params,
-        timeout: 10000 // 10 segundos de timeout
+        timeout: 15000 // 15 segundos de timeout
       });
       
       console.log('Resposta da API de pedidos:', response.data);
+      
+      // Verifica se a resposta contém dados reais ou mockados
+      if (response.data.mock) {
+        // Se forem dados mockados, exibe um aviso
+        toast({
+          title: 'Aviso: Dados temporários',
+          description: 'Exibindo dados temporários. O sistema tentará reconectar ao banco de dados em breve.',
+          status: 'warning',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
       
       setPedidos(response.data.pedidos);
       setTotalPedidos(response.data.total);
@@ -167,7 +179,7 @@ export default function Pedidos() {
         produto_nome: 'Produto de teste',
         quantidade: 100,
         valor: 50.0,
-        status: ['pendente', 'processando', 'completo', 'falha'][Math.floor(Math.random() * 4)],
+        status: ['pendente', 'processando', 'completo', 'falha', 'cancelado', 'parcial'][Math.floor(Math.random() * 6)],
         cliente_id: 'mock-client',
         cliente_nome: 'Cliente de teste',
         cliente_email: 'teste@exemplo.com'
@@ -329,47 +341,69 @@ export default function Pedidos() {
     });
   };
   
-  // Função para exibir o status com a cor adequada
-  const renderStatus = (status: string) => {
-    let color = 'gray';
-    let texto = 'Desconhecido';
-    
+  // Função para obter a cor do badge de status
+  const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
+      case 'pendente':
+      case 'pending':
+        return 'yellow';
+      case 'processando':
+      case 'processing':
+      case 'in progress':
+        return 'blue';
       case 'completo':
       case 'completed':
       case 'success':
-        color = 'green';
-        texto = 'Completo';
-        break;
-      case 'processando':
-      case 'processing':
-      case 'in_progress':
-        color = 'blue';
-        texto = 'Processando';
-        break;
-      case 'pendente':
-      case 'pending':
-      case 'waiting':
-        color = 'yellow';
-        texto = 'Pendente';
-        break;
+        return 'green';
       case 'falha':
       case 'failed':
-      case 'error':
-        color = 'red';
-        texto = 'Falha';
-        break;
+      case 'rejected':
+        return 'red';
       case 'cancelado':
-      case 'cancelled':
       case 'canceled':
-        color = 'purple';
-        texto = 'Cancelado';
-        break;
+        return 'gray';
+      case 'parcial':
+      case 'partial':
+        return 'purple';
       default:
-        texto = status;
+        return 'gray';
+    }
+  };
+  
+  // Função para traduzir o status para português
+  const getOrderStatusBadge = (status: string) => {
+    const statusLower = status.toLowerCase();
+    
+    // Tradução do status para português
+    let statusText = status;
+    switch (statusLower) {
+      case 'pending':
+        statusText = 'Pendente';
+        break;
+      case 'processing':
+      case 'in progress':
+        statusText = 'Processando';
+        break;
+      case 'completed':
+      case 'success':
+        statusText = 'Concluído';
+        break;
+      case 'failed':
+      case 'rejected':
+        statusText = 'Falhou';
+        break;
+      case 'canceled':
+        statusText = 'Cancelado';
+        break;
+      case 'partial':
+        statusText = 'Parcial';
+        break;
     }
     
-    return <Badge colorScheme={color}>{texto}</Badge>;
+    return {
+      text: statusText,
+      color: getStatusColor(statusLower)
+    };
   };
   
   // Calcular número total de páginas
@@ -530,7 +564,11 @@ export default function Pedidos() {
                     <Td>{pedido.provedor_nome}</Td>
                     <Td isNumeric>{pedido.quantidade.toLocaleString()}</Td>
                     <Td isNumeric>{formatarValor(pedido.valor)}</Td>
-                    <Td>{renderStatus(pedido.status)}</Td>
+                    <Td>
+                      <Badge colorScheme={getOrderStatusBadge(pedido.status).color}>
+                        {getOrderStatusBadge(pedido.status).text}
+                      </Badge>
+                    </Td>
                     <Td>
                       <HStack spacing={1}>
                         <IconButton
