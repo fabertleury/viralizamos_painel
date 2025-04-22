@@ -52,16 +52,25 @@ interface DashboardData {
   ultimaAtualizacao: string;
 }
 
-// Formatador de moeda
-const formatCurrency = (value: number) => {
+// Formatador de moeda que lida com valores indefinidos ou zero
+const formatCurrency = (value: number | undefined | null) => {
+  const numberValue = value ?? 0;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL'
-  }).format(value); // Valor já está em reais, não precisa dividir por 100
+  }).format(numberValue);
 };
 
-// Formatador de data
-const formatDate = (dateString: string) => {
+// Formatador de porcentagem que lida com valores indefinidos ou zero
+const formatPercentage = (value: number | undefined | null) => {
+  const numberValue = value ?? 0;
+  return `${Math.abs(numberValue)}%`;
+};
+
+// Formatador de data que lida com valores indefinidos
+const formatDate = (dateString: string | undefined | null) => {
+  if (!dateString) return 'Data desconhecida';
+  
   return new Date(dateString).toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
@@ -100,7 +109,7 @@ function Dashboard() {
     const fetchDashboardData = async () => {
       try {
         const response = await axios.get('/api/dashboard');
-        setDashboardData(response.data);
+        setDashboardData(normalizeData(response.data));
         setError(null);
       } catch (error) {
         console.error('Erro ao buscar dados do dashboard:', error);
@@ -282,14 +291,11 @@ function Dashboard() {
                 <Stat>
                   <StatLabel fontSize="sm" color="gray.500">Receita (R$)</StatLabel>
                   <StatNumber fontSize="3xl">
-                    R$ {dashboardData.estatisticas.transacoes.valorTotal.toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2
-                    })}
+                    {formatCurrency(dashboardData.estatisticas.transacoes.valorTotal)}
                   </StatNumber>
                   <StatHelpText>
-                    <StatArrow type={dashboardData.estatisticas.transacoes.crescimento >= 0 ? 'increase' : 'decrease'} />
-                    {Math.abs(dashboardData.estatisticas.transacoes.crescimento)}% em relação ao mês anterior
+                    <StatArrow type={(dashboardData.estatisticas.transacoes.crescimento || 0) >= 0 ? 'increase' : 'decrease'} />
+                    {formatPercentage(dashboardData.estatisticas.transacoes.crescimento)} em relação ao mês anterior
                   </StatHelpText>
                 </Stat>
               </StatGroup>
@@ -391,6 +397,40 @@ function Dashboard() {
     </AdminLayout>
   );
 }
+
+// Garantir que os dados sempre tenham uma estrutura válida para evitar erros no render
+const normalizeData = (data: any): DashboardData => {
+  return {
+    estatisticas: {
+      transacoes: {
+        total: data?.estatisticas?.transacoes?.total ?? 0,
+        crescimento: data?.estatisticas?.transacoes?.crescimento ?? 0,
+        valorTotal: data?.estatisticas?.transacoes?.valorTotal ?? 0,
+      },
+      pedidos: {
+        total: data?.estatisticas?.pedidos?.total ?? 0,
+        crescimento: data?.estatisticas?.pedidos?.crescimento ?? 0,
+        concluidos: data?.estatisticas?.pedidos?.concluidos ?? 0,
+        pendentes: data?.estatisticas?.pedidos?.pendentes ?? 0,
+        cancelados: data?.estatisticas?.pedidos?.cancelados ?? 0,
+      },
+      usuarios: {
+        total: data?.estatisticas?.usuarios?.total ?? 0,
+        crescimento: data?.estatisticas?.usuarios?.crescimento ?? 0,
+        novos: data?.estatisticas?.usuarios?.novos ?? 0,
+      },
+    },
+    graficos: {
+      transacoesPorDia: data?.graficos?.transacoesPorDia ?? [],
+      statusPedidos: {
+        labels: data?.graficos?.statusPedidos?.labels ?? ['Completos', 'Pendentes', 'Cancelados'],
+        dados: data?.graficos?.statusPedidos?.dados ?? [0, 0, 0],
+      },
+    },
+    atividades: data?.atividades ?? [],
+    ultimaAtualizacao: data?.ultimaAtualizacao ?? new Date().toISOString(),
+  };
+};
 
 export default dynamic(() => Promise.resolve(Dashboard), {
   ssr: false,
