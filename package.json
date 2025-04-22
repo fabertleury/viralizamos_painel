@@ -12,7 +12,7 @@
     "db:clean": "node scripts/executar_limpeza.js",
     "db:check": "node scripts/verificar_tabelas.js",
     "preinstall": "npx npm-force-resolutions || true",
-    "postinstall": "echo 'Instalação concluída com sucesso'"
+    "postinstall": "prisma generate && echo 'Instalação concluída com sucesso'"
   },
   "resolutions": {
     "string-width": "4.2.3",
