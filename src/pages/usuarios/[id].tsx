@@ -51,6 +51,7 @@ import NextLink from 'next/link';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
+import MetricasUsuarioDetalhadas from '@/components/usuarios/MetricasUsuarioDetalhadas';
 
 // Importação dinâmica do componente de gráfico para evitar problemas de SSR
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -581,21 +582,19 @@ export default function DetalhesUsuario() {
           
           {/* Aba de Métricas */}
           <TabPanel>
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-              {/* Gráfico de tendência de compras */}
+            <SimpleGrid columns={{ base: 1, md: 1 }} spacing={6}>
+              {/* Adicionar o novo componente de métricas detalhadas */}
+              <MetricasUsuarioDetalhadas userId={id as string} />
+              
+              {/* Mostrar os gráficos originais para manter a compatibilidade */}
               <Card bg={cardBg} shadow="md">
                 <CardHeader>
                   <Heading size="md">Tendência de Compras</Heading>
                 </CardHeader>
                 <CardBody>
-                  {getTendenciaComprasChart() ? (
+                  {metricas?.tendencia_compras && metricas.tendencia_compras.length > 0 ? (
                     <Box id="chart">
-                      <Chart
-                        options={getTendenciaComprasChart()?.options}
-                        series={getTendenciaComprasChart()?.series}
-                        type="area"
-                        height={350}
-                      />
+                      {typeof window !== 'undefined' && getTendenciaComprasChart()}
                     </Box>
                   ) : (
                     <Text>Dados insuficientes para gerar o gráfico</Text>
@@ -603,91 +602,17 @@ export default function DetalhesUsuario() {
                 </CardBody>
               </Card>
               
-              {/* Gráfico de distribuição de status */}
               <Card bg={cardBg} shadow="md">
                 <CardHeader>
-                  <Heading size="md">Distribuição de Status</Heading>
+                  <Heading size="md">Distribuição por Status</Heading>
                 </CardHeader>
                 <CardBody>
-                  {getDistribuicaoStatusChart() ? (
-                    <Box id="chart">
-                      <Chart
-                        options={getDistribuicaoStatusChart()?.options}
-                        series={getDistribuicaoStatusChart()?.series}
-                        type="pie"
-                        height={350}
-                      />
+                  {metricas?.distribuicao_status && Object.keys(metricas.distribuicao_status).length > 0 ? (
+                    <Box id="chart-status">
+                      {typeof window !== 'undefined' && getDistribuicaoStatusChart()}
                     </Box>
                   ) : (
                     <Text>Dados insuficientes para gerar o gráfico</Text>
-                  )}
-                </CardBody>
-              </Card>
-              
-              {/* Estatísticas adicionais */}
-              <Card bg={cardBg} shadow="md">
-                <CardHeader>
-                  <Heading size="md">Estatísticas de Compra</Heading>
-                </CardHeader>
-                <CardBody>
-                  <Stack divider={<StackDivider />} spacing={4}>
-                    <Box>
-                      <Text fontWeight="bold">Valor Médio de Compra</Text>
-                      <Text fontSize="2xl">{formatarValor(metricas?.valor_medio_compra || 0)}</Text>
-                    </Box>
-                    
-                    <Box>
-                      <Text fontWeight="bold">Frequência de Compras</Text>
-                      <Text fontSize="2xl">
-                        {metricas?.dias_entre_compras 
-                          ? `${Math.round(metricas.dias_entre_compras)} dias entre compras`
-                          : 'Dados insuficientes'}
-                      </Text>
-                    </Box>
-                    
-                    <Box>
-                      <Text fontWeight="bold">Primeira Compra</Text>
-                      <Text fontSize="lg">
-                        {metricas?.primeiro_pedido 
-                          ? formatarData(metricas.primeiro_pedido)
-                          : 'Não disponível'}
-                      </Text>
-                    </Box>
-                  </Stack>
-                </CardBody>
-              </Card>
-              
-              {/* Serviços mais comprados */}
-              <Card bg={cardBg} shadow="md">
-                <CardHeader>
-                  <Heading size="md">Serviços Mais Comprados</Heading>
-                </CardHeader>
-                <CardBody>
-                  {metricas?.top_services && metricas.top_services.length > 0 ? (
-                    <Stack divider={<StackDivider />} spacing={4}>
-                      {metricas.top_services.map((servico: any, index: number) => (
-                        <Box key={index}>
-                          <Flex justify="space-between" align="center" mb={1}>
-                            <Text fontWeight="bold">{servico.service_name}</Text>
-                            <Text>{servico.count} pedidos</Text>
-                          </Flex>
-                          <Progress 
-                            value={servico.count} 
-                            max={metricas.top_services[0].count}
-                            colorScheme={index === 0 ? 'blue' : index === 1 ? 'green' : 'purple'}
-                            size="sm"
-                            borderRadius="full"
-                          />
-                          {servico.total_spent && (
-                            <Text fontSize="sm" color={subtitleColor} mt={1}>
-                              Total gasto: {formatarValor(servico.total_spent)}
-                            </Text>
-                          )}
-                        </Box>
-                      ))}
-                    </Stack>
-                  ) : (
-                    <Text>Nenhum serviço utilizado</Text>
                   )}
                 </CardBody>
               </Card>
@@ -695,6 +620,34 @@ export default function DetalhesUsuario() {
           </TabPanel>
         </TabPanels>
       </Tabs>
+      
+      {/* Botões de ação no rodapé */}
+      <Flex justify="flex-end" mt={8} mb={4}>
+        <Button
+          as={NextLink}
+          href={`/usuarios/editar/${id}`}
+          colorScheme="blue"
+          mr={3}
+        >
+          Editar Usuário
+        </Button>
+        
+        <Button
+          colorScheme="red"
+          onClick={() => {
+            // Aqui seria implementada a lógica para excluir o usuário
+            toast({
+              title: 'Funcionalidade não implementada',
+              description: 'A exclusão de usuários ainda não está disponível.',
+              status: 'info',
+              duration: 3000,
+              isClosable: true,
+            });
+          }}
+        >
+          Excluir Usuário
+        </Button>
+      </Flex>
     </Box>
   );
 }
