@@ -25,9 +25,15 @@ export default async function handler(
 
     console.log(`Tentativa de login para o email: ${email}`);
 
+    // Verificar se as variáveis de ambiente estão definidas
+    if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+      console.error('Erro: Credenciais de administrador não configuradas nas variáveis de ambiente');
+      return res.status(500).json({ message: 'Erro de configuração do servidor' });
+    }
+
     // Verificar se o acesso é do administrador
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@viralizamos.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || '7X#pK9@vD2zF5qL!eR8gT$hY3mN6bW';
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
 
     // Comparar credenciais de forma segura (tempo constante)
     const isAdmin = email === adminEmail && password === adminPassword;
@@ -46,9 +52,14 @@ export default async function handler(
         exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7) // 7 dias
       };
 
+      // Verificar se JWT_SECRET está configurado
+      if (!process.env.JWT_SECRET) {
+        console.error('Erro: JWT_SECRET não configurado nas variáveis de ambiente');
+        return res.status(500).json({ message: 'Erro de configuração do servidor' });
+      }
+
       // Gerar JWT token usando o secret definido nas variáveis de ambiente
-      const jwtSecret = process.env.JWT_SECRET || 'viralizamosSecretKey2024';
-      const token = jwt.sign(userData, jwtSecret);
+      const token = jwt.sign(userData, process.env.JWT_SECRET);
       
       return res.status(200).json({
         token: token,
