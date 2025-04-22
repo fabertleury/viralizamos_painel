@@ -3,7 +3,7 @@ import { QueryResolvers } from '../../types/graphql';
 
 // Configuração das APIs
 const pagamentosApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api',
+  baseURL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -11,7 +11,7 @@ const pagamentosApi = axios.create({
 });
 
 const ordersApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com/api',
+  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

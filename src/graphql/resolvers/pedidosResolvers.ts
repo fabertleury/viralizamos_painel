@@ -16,7 +16,7 @@ interface FiltroInput {
 
 // Configuração da API de orders
 const ordersApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com/api',
+  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

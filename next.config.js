@@ -82,8 +82,8 @@ const nextConfig = {
   // Define variáveis de ambiente públicas para o cliente
   env: {
     NEXT_PUBLIC_PAINEL_URL: process.env.NEXT_PUBLIC_PAINEL_URL,
-    NEXT_PUBLIC_PAGAMENTOS_API_URL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL,
-    NEXT_PUBLIC_ORDERS_API_URL: process.env.NEXT_PUBLIC_ORDERS_API_URL
+    NEXT_PUBLIC_PAGAMENTOS_API_URL: 'https://pagamentos.viralizamos.com',
+    NEXT_PUBLIC_ORDERS_API_URL: 'https://orders.viralizamos.com'
   },
   // Configuração para ignorar erros durante o build em determinadas páginas
   onDemandEntries: {

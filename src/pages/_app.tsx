@@ -5,6 +5,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import '../styles/globals.css';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import { installApiFix } from '../utils/apiUrlFix';
 
 // Component to handle router ready state
 function RouterProvider({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,17 @@ function SafeHydrate({ children }: { children: React.ReactNode }) {
 }
 
 function MyApp({ Component, pageProps }: AppProps) {
+  // Instalar o fix de API no lado do cliente
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        installApiFix();
+      } catch (error) {
+        console.error('Erro ao instalar o fix de API:', error);
+      }
+    }
+  }, []);
+
   return (
     <SafeHydrate>
       <ChakraProvider>
