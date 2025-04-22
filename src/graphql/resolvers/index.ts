@@ -1,4 +1,4 @@
-import { dashboardResolvers } from './dashboardResolvers';
+import { dadosDashboard } from './dashboardResolvers';
 import { pedidosResolvers } from './pedidosResolvers';
 import { transacoesResolvers } from './transacoesResolvers';
 import { usuariosResolvers } from './usuariosResolvers';
@@ -6,7 +6,7 @@ import { usuariosResolvers } from './usuariosResolvers';
 // Combinar todos os resolvers
 export const resolvers = {
   Query: {
-    dadosDashboard: dashboardResolvers.dadosDashboard,
+    dadosDashboard,
     ...pedidosResolvers.Query,
     ...transacoesResolvers.Query,
     ...usuariosResolvers.Query,
