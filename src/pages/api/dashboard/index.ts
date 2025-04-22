@@ -1,83 +1,140 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
 
 // Conexão com o banco de dados de pedidos
-const ordersPrisma = new Pool({
+const ordersPool = new Pool({
   connectionString: process.env.ORDERS_DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Conexão com o banco de dados de pagamentos
-const paymentsPrisma = new Pool({
+const pagamentosPool = new Pool({
   connectionString: process.env.PAGAMENTOS_DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Conexão com o banco de dados principal
-const dbPrisma = new Pool({
+const mainPool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Função para calcular o crescimento percentual
 function calcularCrescimento(atual: number, anterior: number): number {
-  if (anterior === 0) return 100;
+  if (anterior === 0) return atual > 0 ? 100 : 0;
   return Math.round(((atual - anterior) / anterior) * 100);
 }
 
 // Funções de acesso ao banco de dados
 async function obterEstatisticasPedidos() {
   try {
-    const query = `
+    // Dados do mês atual
+    const queryAtual = `
       SELECT 
         COUNT(*) as total_pedidos,
-        SUM(CASE WHEN status = 'completo' THEN 1 ELSE 0 END) as total_completos,
-        SUM(CASE WHEN status = 'processando' THEN 1 ELSE 0 END) as total_processando,
-        SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as total_pendentes,
-        SUM(CASE WHEN status = 'falha' THEN 1 ELSE 0 END) as total_falhas,
-        SUM(price) as valor_total
-      FROM orders
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as total_completos,
+        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as total_processando,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as total_pendentes,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as total_falhas,
+        SUM(amount) as valor_total
+      FROM "Order"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
-    const result = await ordersPrisma.query(query);
-    return result.rows[0];
+    // Dados do mês anterior
+    const queryAnterior = `
+      SELECT COUNT(*) as total_mes_anterior
+      FROM "Order"
+      WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
+    `;
+    
+    const [resultAtual, resultAnterior] = await Promise.all([
+      ordersPool.query(queryAtual),
+      ordersPool.query(queryAnterior)
+    ]);
+    
+    const dadosAtual = resultAtual.rows[0];
+    const totalAnterior = parseInt(resultAnterior.rows[0].total_mes_anterior || '0');
+    const totalAtual = parseInt(dadosAtual.total_pedidos || '0');
+    
+    // Calcular crescimento
+    const crescimento = calcularCrescimento(totalAtual, totalAnterior);
+    
+    return {
+      total: totalAtual,
+      completados: parseInt(dadosAtual.total_completos || '0'),
+      processando: parseInt(dadosAtual.total_processando || '0'),
+      pendentes: parseInt(dadosAtual.total_pendentes || '0'),
+      falhas: parseInt(dadosAtual.total_falhas || '0'),
+      valorTotal: parseInt(dadosAtual.valor_total || '0'),
+      crescimento
+    };
   } catch (error) {
     console.error('Erro ao obter estatísticas de pedidos:', error);
     // Retorna valores padrão em caso de erro
     return {
-      total_pedidos: 0,
-      total_completos: 0,
-      total_processando: 0,
-      total_pendentes: 0,
-      total_falhas: 0,
-      valor_total: 0
+      total: 0,
+      completados: 0,
+      processando: 0,
+      pendentes: 0,
+      falhas: 0,
+      valorTotal: 0,
+      crescimento: 0
     };
   }
 }
 
 async function obterEstatisticasTransacoes() {
   try {
-    const query = `
+    // Dados do mês atual
+    const queryAtual = `
       SELECT 
         COUNT(*) as total_transacoes,
-        SUM(CASE WHEN status = 'aprovado' THEN 1 ELSE 0 END) as total_aprovadas,
-        SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as total_pendentes,
-        SUM(CASE WHEN status = 'recusado' THEN 1 ELSE 0 END) as total_recusadas,
-        SUM(CASE WHEN status = 'aprovado' THEN valor ELSE 0 END) as valor_total_aprovado
-      FROM transacoes
-      WHERE data_criacao >= NOW() - INTERVAL '30 days'
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as total_aprovadas,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as total_pendentes,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as total_recusadas,
+        SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_total_aprovado
+      FROM "Transaction"
+      WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
-    const result = await paymentsPrisma.query(query);
-    return result.rows[0];
+    // Dados do mês anterior
+    const queryAnterior = `
+      SELECT COUNT(*) as total_mes_anterior
+      FROM "Transaction"
+      WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
+    `;
+    
+    const [resultAtual, resultAnterior] = await Promise.all([
+      pagamentosPool.query(queryAtual),
+      pagamentosPool.query(queryAnterior)
+    ]);
+    
+    const dadosAtual = resultAtual.rows[0];
+    const totalAnterior = parseInt(resultAnterior.rows[0].total_mes_anterior || '0');
+    const totalAtual = parseInt(dadosAtual.total_transacoes || '0');
+    
+    // Calcular crescimento
+    const crescimento = calcularCrescimento(totalAtual, totalAnterior);
+    
+    return {
+      total: totalAtual,
+      aprovadas: parseInt(dadosAtual.total_aprovadas || '0'),
+      pendentes: parseInt(dadosAtual.total_pendentes || '0'),
+      recusadas: parseInt(dadosAtual.total_recusadas || '0'),
+      valorTotal: parseInt(dadosAtual.valor_total_aprovado || '0'),
+      crescimento
+    };
   } catch (error) {
     console.error('Erro ao obter estatísticas de transações:', error);
     // Retorna valores padrão em caso de erro
     return {
-      total_transacoes: 0,
-      total_aprovadas: 0,
-      total_pendentes: 0,
-      total_recusadas: 0,
-      valor_total_aprovado: 0
+      total: 0,
+      aprovadas: 0,
+      pendentes: 0,
+      recusadas: 0,
+      valorTotal: 0,
+      crescimento: 0
     };
   }
 }
@@ -86,45 +143,36 @@ async function obterEstatisticasUsuarios() {
   try {
     const totalQuery = `
       SELECT COUNT(*) as total
-      FROM users
-    `;
-    
-    const ativosQuery = `
-      SELECT COUNT(*) as ativos
-      FROM users
-      WHERE last_login >= NOW() - INTERVAL '30 days'
+      FROM "User"
     `;
     
     const novosQuery = `
       SELECT COUNT(*) as novos
-      FROM users
+      FROM "User"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
     const mesAnteriorQuery = `
       SELECT COUNT(*) as total_mes_anterior
-      FROM users
+      FROM "User"
       WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
     `;
     
-    const [totalResult, ativosResult, novosResult, mesAnteriorResult] = await Promise.all([
-      dbPrisma.query(totalQuery),
-      dbPrisma.query(ativosQuery),
-      dbPrisma.query(novosQuery),
-      dbPrisma.query(mesAnteriorQuery)
+    const [totalResult, novosResult, mesAnteriorResult] = await Promise.all([
+      ordersPool.query(totalQuery),
+      ordersPool.query(novosQuery),
+      ordersPool.query(mesAnteriorQuery)
     ]);
     
-    const total = parseInt(totalResult.rows[0].total);
-    const ativos = parseInt(ativosResult.rows[0].ativos);
-    const novos = parseInt(novosResult.rows[0].novos);
-    const totalMesAnterior = parseInt(mesAnteriorResult.rows[0].total_mes_anterior);
+    const total = parseInt(totalResult.rows[0].total || '0');
+    const novos = parseInt(novosResult.rows[0].novos || '0');
+    const totalMesAnterior = parseInt(mesAnteriorResult.rows[0].total_mes_anterior || '0');
     
     // Calcular crescimento
     const crescimento = calcularCrescimento(novos, totalMesAnterior);
     
     return {
       total,
-      ativos,
       novos,
       crescimento
     };
@@ -132,7 +180,6 @@ async function obterEstatisticasUsuarios() {
     console.error('Erro ao obter estatísticas de usuários:', error);
     return {
       total: 0,
-      ativos: 0, 
       novos: 0,
       crescimento: 0
     };
@@ -145,10 +192,10 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
       SELECT 
         DATE(created_at) as data,
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'completo' THEN 1 ELSE 0 END) as completos,
-        SUM(CASE WHEN status = 'falha' THEN 1 ELSE 0 END) as falhas
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completos,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as falhas
       FROM 
-        orders
+        "Order"
       WHERE 
         created_at >= NOW() - INTERVAL '${dias} days'
       GROUP BY 
@@ -157,8 +204,13 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
         data
     `;
     
-    const result = await ordersPrisma.query(query);
-    return result.rows;
+    const result = await ordersPool.query(query);
+    return result.rows.map(row => ({
+      data: row.data.toISOString().split('T')[0],
+      total: parseInt(row.total || '0'),
+      completos: parseInt(row.completos || '0'),
+      falhas: parseInt(row.falhas || '0')
+    }));
   } catch (error) {
     console.error(`Erro ao obter pedidos por período (${dias} dias):`, error);
     return [];
@@ -169,21 +221,25 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
   try {
     const query = `
       SELECT 
-        DATE(data_criacao) as data,
+        DATE(created_at) as data,
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'aprovado' THEN valor ELSE 0 END) as valor_aprovado
+        SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_aprovado
       FROM 
-        transacoes
+        "Transaction"
       WHERE 
-        data_criacao >= NOW() - INTERVAL '${dias} days'
+        created_at >= NOW() - INTERVAL '${dias} days'
       GROUP BY 
-        DATE(data_criacao)
+        DATE(created_at)
       ORDER BY 
         data
     `;
     
-    const result = await paymentsPrisma.query(query);
-    return result.rows;
+    const result = await pagamentosPool.query(query);
+    return result.rows.map(row => ({
+      data: row.data.toISOString().split('T')[0],
+      total: parseInt(row.total || '0'),
+      valorAprovado: parseInt(row.valor_aprovado || '0')
+    }));
   } catch (error) {
     console.error(`Erro ao obter transações por período (${dias} dias):`, error);
     return [];
@@ -199,50 +255,81 @@ async function obterAtividadesRecentes(limite: number = 10) {
         o.id,
         o.created_at as data,
         u.name as usuario,
-        s.name as item,
+        o.service_name as item,
         o.status,
-        o.price as valor
+        o.amount as valor
       FROM 
-        orders o
+        "Order" o
       LEFT JOIN 
-        users u ON o.user_id = u.id
-      LEFT JOIN 
-        services s ON o.service_id = s.id
+        "User" u ON o.user_id = u.id
       ORDER BY 
         o.created_at DESC
       LIMIT $1
     `;
     
-    // Buscar transações recentes (de outro banco)
+    // Buscar transações recentes
     const transacoesQuery = `
       SELECT 
         'transacao' as tipo,
         t.id,
-        t.data_criacao as data,
-        u.nome as usuario,
-        p.nome as item,
+        t.created_at as data,
+        u.name as usuario,
+        t.description as item,
         t.status,
-        t.valor
+        t.amount as valor
       FROM 
-        transacoes t
+        "Transaction" t
       LEFT JOIN 
-        usuarios u ON t.cliente_id = u.id
-      LEFT JOIN 
-        produtos p ON t.produto_id = p.id
+        "User" u ON t.user_id = u.id
       ORDER BY 
-        t.data_criacao DESC
+        t.created_at DESC
       LIMIT $1
     `;
     
     const [pedidosResult, transacoesResult] = await Promise.all([
-      ordersPrisma.query(pedidosQuery, [limite]),
-      paymentsPrisma.query(transacoesQuery, [limite])
+      ordersPool.query(pedidosQuery, [limite]),
+      pagamentosPool.query(transacoesQuery, [limite])
     ]);
+    
+    // Mapear status para português
+    const mapearStatus = (status: string) => {
+      const statusMap: {[key: string]: string} = {
+        'completed': 'concluído',
+        'pending': 'pendente',
+        'processing': 'processando',
+        'failed': 'falha',
+        'approved': 'aprovado',
+        'rejected': 'rejeitado'
+      };
+      return statusMap[status] || status;
+    };
+    
+    // Processar pedidos
+    const pedidos = pedidosResult.rows.map(p => ({
+      id: p.id,
+      tipo: p.tipo,
+      data: p.data.toISOString(),
+      usuario: p.usuario || 'Não informado',
+      item: p.item || 'Pedido ' + p.id,
+      status: mapearStatus(p.status),
+      valor: p.valor
+    }));
+    
+    // Processar transações
+    const transacoes = transacoesResult.rows.map(t => ({
+      id: t.id,
+      tipo: t.tipo,
+      data: t.data.toISOString(),
+      usuario: t.usuario || 'Não informado',
+      item: t.valor ? `R$ ${(t.valor / 100).toFixed(2)}` : 'Transação ' + t.id,
+      status: mapearStatus(t.status),
+      valor: t.valor
+    }));
     
     // Combinar resultados e ordenar por data
     const atividades = [
-      ...pedidosResult.rows,
-      ...transacoesResult.rows
+      ...pedidos,
+      ...transacoes
     ].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
     .slice(0, limite);
     
@@ -259,101 +346,67 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Simular dados do dashboard já que os bancos podem estar inacessíveis
-    const dadosDashboard = {
+    // Buscar dados reais de diferentes fontes em paralelo
+    console.log('Buscando dados do dashboard em tempo real...');
+    
+    const [
+      estatisticasPedidos,
+      estatisticasTransacoes,
+      estatisticasUsuarios,
+      transacoesPorDia,
+      pedidosPorStatus,
+      atividadesRecentes
+    ] = await Promise.all([
+      obterEstatisticasPedidos(),
+      obterEstatisticasTransacoes(),
+      obterEstatisticasUsuarios(),
+      obterTransacoesPorPeriodo(7),
+      obterPedidosPorPeriodo(7),
+      obterAtividadesRecentes(10)
+    ]);
+    
+    // Calcular dados para o gráfico de status de pedidos
+    const statusPedidos = {
+      labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
+      dados: [
+        estatisticasPedidos.completados,
+        estatisticasPedidos.processando,
+        estatisticasPedidos.pendentes,
+        estatisticasPedidos.falhas
+      ]
+    };
+    
+    // Estruturar dados do dashboard
+    const dashboardData = {
       estatisticas: {
         transacoes: {
-          total: 156,
-          crescimento: 12.5,
-          valorTotal: 2845790 // em centavos (R$ 28.457,90)
+          total: estatisticasTransacoes.total,
+          crescimento: estatisticasTransacoes.crescimento,
+          valorTotal: estatisticasTransacoes.valorTotal
         },
         pedidos: {
-          total: 142,
-          crescimento: 8.3,
-          completados: 115,
-          pendentes: 18,
-          falhas: 9
+          total: estatisticasPedidos.total,
+          crescimento: estatisticasPedidos.crescimento,
+          completados: estatisticasPedidos.completados,
+          pendentes: estatisticasPedidos.pendentes,
+          falhas: estatisticasPedidos.falhas
         },
         usuarios: {
-          total: 87,
-          crescimento: 15.2,
-          novos: 12
+          total: estatisticasUsuarios.total,
+          crescimento: estatisticasUsuarios.crescimento,
+          novos: estatisticasUsuarios.novos
         }
       },
       graficos: {
-        transacoesPorDia: [
-          { data: '2023-06-01', total: 15, valorAprovado: 148900 },
-          { data: '2023-06-02', total: 18, valorAprovado: 205720 },
-          { data: '2023-06-03', total: 25, valorAprovado: 310550 },
-          { data: '2023-06-04', total: 22, valorAprovado: 270330 },
-          { data: '2023-06-05', total: 27, valorAprovado: 395100 },
-          { data: '2023-06-06', total: 24, valorAprovado: 310220 },
-          { data: '2023-06-07', total: 25, valorAprovado: 345780 }
-        ],
-        statusPedidos: {
-          labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
-          dados: [115, 32, 18, 9]
-        }
+        transacoesPorDia,
+        statusPedidos
       },
-      atividades: [
-        {
-          id: '1',
-          tipo: 'pedido',
-          usuario: 'cliente@exemplo.com',
-          item: 'Seguidores Instagram',
-          status: 'aprovado',
-          data: '2023-06-07T14:32:45Z'
-        },
-        {
-          id: '2',
-          tipo: 'transacao',
-          usuario: 'marcos@empresa.com',
-          item: 'R$ 159,90',
-          status: 'aprovado',
-          data: '2023-06-07T10:15:22Z'
-        },
-        {
-          id: '3',
-          tipo: 'usuario',
-          usuario: 'novocliente@gmail.com',
-          item: 'Cadastro',
-          status: 'concluído',
-          data: '2023-06-06T18:45:12Z'
-        },
-        {
-          id: '4',
-          tipo: 'pedido',
-          usuario: 'empresa@contato.com',
-          item: 'Likes Facebook',
-          status: 'processando',
-          data: '2023-06-06T16:20:33Z'
-        },
-        {
-          id: '5',
-          tipo: 'transacao',
-          usuario: 'carla@exemplo.net',
-          item: 'R$ 89,90',
-          status: 'pendente',
-          data: '2023-06-06T09:12:05Z'
-        }
-      ],
+      atividades: atividadesRecentes,
       ultimaAtualizacao: new Date().toISOString()
     };
 
-    // Tentar obter dados reais do banco de dados, mas usar os simulados em caso de erro
-    try {
-      // Tentativa de consultar dados reais (apenas para demonstração)
-      // Em produção, aqui seriam feitas consultas aos bancos de dados
-      
-      // Aqui mantemos os dados simulados acima
-      
-    } catch (dbError) {
-      console.error('Erro ao consultar banco de dados:', dbError);
-      // Continuar com os dados simulados
-    }
-
     // Retornar os dados do dashboard
-    return res.status(200).json(dadosDashboard);
+    return res.status(200).json(dashboardData);
   } catch (error) {
     console.error('Erro ao processar requisição:', error);
     return res.status(500).json({ 

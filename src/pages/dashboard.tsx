@@ -4,90 +4,53 @@ import AdminLayout from '../components/Layout/AdminLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Box, Spinner, Text, SimpleGrid, Heading, Flex, Stat, StatLabel, StatNumber, StatHelpText, StatArrow, StatGroup, Table, Thead, Tbody, Tr, Th, Td, Badge } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
+import axios from 'axios';
 
 // Importação dinâmica dos componentes de gráfico para evitar problemas de SSR
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
-// Dados simulados para o dashboard
-const dashboardData = {
+// Interface para o tipo de dados retornados pela API
+interface DashboardData {
   estatisticas: {
     transacoes: {
-      total: 156,
-      crescimento: 12.5,
-      valorTotal: 2845790 // em centavos (R$ 28.457,90)
-    },
+      total: number;
+      crescimento: number;
+      valorTotal: number;
+    };
     pedidos: {
-      total: 142,
-      crescimento: 8.3,
-      completados: 115,
-      pendentes: 18,
-      falhas: 9
-    },
+      total: number;
+      crescimento: number;
+      completados: number;
+      pendentes: number;
+      falhas: number;
+    };
     usuarios: {
-      total: 87,
-      crescimento: 15.2,
-      novos: 12
-    }
-  },
+      total: number;
+      crescimento: number;
+      novos: number;
+    };
+  };
   graficos: {
-    transacoesPorDia: [
-      { data: '2023-06-01', total: 15, valorAprovado: 148900 },
-      { data: '2023-06-02', total: 18, valorAprovado: 205720 },
-      { data: '2023-06-03', total: 25, valorAprovado: 310550 },
-      { data: '2023-06-04', total: 22, valorAprovado: 270330 },
-      { data: '2023-06-05', total: 27, valorAprovado: 395100 },
-      { data: '2023-06-06', total: 24, valorAprovado: 310220 },
-      { data: '2023-06-07', total: 25, valorAprovado: 345780 }
-    ],
+    transacoesPorDia: Array<{
+      data: string;
+      total: number;
+      valorAprovado: number;
+    }>;
     statusPedidos: {
-      labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
-      dados: [115, 32, 18, 9]
-    }
-  },
-  atividades: [
-    {
-      id: '1',
-      tipo: 'pedido',
-      usuario: 'cliente@exemplo.com',
-      item: 'Seguidores Instagram',
-      status: 'aprovado',
-      data: '2023-06-07T14:32:45Z'
-    },
-    {
-      id: '2',
-      tipo: 'transacao',
-      usuario: 'marcos@empresa.com',
-      item: 'R$ 159,90',
-      status: 'aprovado',
-      data: '2023-06-07T10:15:22Z'
-    },
-    {
-      id: '3',
-      tipo: 'usuario',
-      usuario: 'novocliente@gmail.com',
-      item: 'Cadastro',
-      status: 'concluído',
-      data: '2023-06-06T18:45:12Z'
-    },
-    {
-      id: '4',
-      tipo: 'pedido',
-      usuario: 'empresa@contato.com',
-      item: 'Likes Facebook',
-      status: 'processando',
-      data: '2023-06-06T16:20:33Z'
-    },
-    {
-      id: '5',
-      tipo: 'transacao',
-      usuario: 'carla@exemplo.net',
-      item: 'R$ 89,90',
-      status: 'pendente',
-      data: '2023-06-06T09:12:05Z'
-    }
-  ],
-  ultimaAtualizacao: new Date().toISOString()
-};
+      labels: string[];
+      dados: number[];
+    };
+  };
+  atividades: Array<{
+    id: string;
+    tipo: string;
+    usuario: string;
+    item: string;
+    status: string;
+    data: string;
+  }>;
+  ultimaAtualizacao: string;
+}
 
 // Formatador de moeda
 const formatCurrency = (value: number) => {
@@ -111,9 +74,11 @@ const formatDate = (dateString: string) => {
 // Componente Dashboard
 function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   
-  // Verificar autenticação diretamente
+  // Verificar autenticação e carregar dados
   useEffect(() => {
     // Função para obter valor de cookie
     const getCookie = (name: string) => {
@@ -128,19 +93,45 @@ function Dashboard() {
     if (!token) {
       // Não autenticado, redirecionar imediatamente para login
       router.replace('/login');
-    } else {
-      // Autenticado, carregar dashboard
-      setLoading(false);
+      return;
     }
+
+    // Buscar dados da API
+    const fetchDashboardData = async () => {
+      try {
+        const response = await axios.get('/api/dashboard');
+        setDashboardData(response.data);
+        setError(null);
+      } catch (error) {
+        console.error('Erro ao buscar dados do dashboard:', error);
+        setError('Falha ao carregar os dados do dashboard. Por favor, tente novamente mais tarde.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
   }, [router]);
   
-  // Mostrar loading enquanto verifica autenticação
+  // Mostrar loading enquanto verifica autenticação ou carrega dados
   if (loading) {
     return (
       <AdminLayout>
         <Box p={5} textAlign="center">
           <Spinner size="xl" />
-          <Text mt={4}>Carregando dashboard...</Text>
+          <Text mt={4}>Carregando dados do dashboard...</Text>
+        </Box>
+      </AdminLayout>
+    );
+  }
+
+  // Mostrar erro se ocorrer
+  if (error || !dashboardData) {
+    return (
+      <AdminLayout>
+        <Box p={5} textAlign="center">
+          <Heading as="h2" size="md" color="red.500" mb={4}>Erro</Heading>
+          <Text>{error || 'Não foi possível carregar os dados do dashboard'}</Text>
         </Box>
       </AdminLayout>
     );
@@ -343,7 +334,7 @@ function Dashboard() {
         <Card>
           <CardContent className="p-6">
             <Heading as="h2" size="md" mb={4}>Atividade Recente</Heading>
-            {dashboardData.atividades.length > 0 ? (
+            {dashboardData.atividades && dashboardData.atividades.length > 0 ? (
               <Table variant="simple">
                 <Thead>
                   <Tr>
@@ -388,6 +379,11 @@ function Dashboard() {
             )}
           </CardContent>
         </Card>
+
+        {/* Informação de última atualização */}
+        <Text mt={4} textAlign="right" fontSize="sm" color="gray.500">
+          Última atualização: {formatDate(dashboardData.ultimaAtualizacao)}
+        </Text>
       </Box>
     </AdminLayout>
   );
