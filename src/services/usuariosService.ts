@@ -731,8 +731,8 @@ export async function buscarUsuarios(filtros: FiltroUsuarios = {}) {
   try {
     console.log('Buscando usuários com filtros:', filtros);
 
-    // Usar o endpoint existente /admin/users enquanto o novo endpoint não está disponível em produção
-    const response = await ordersApi.get('/admin/users', {
+    // Tentar o endpoint /api/admin/users no microserviço de orders
+    const response = await ordersApi.get('/api/admin/users', {
       params: {
         page: filtros.pagina || 1,
         limit: filtros.limite || 10,
@@ -779,8 +779,8 @@ export async function buscarUsuarios(filtros: FiltroUsuarios = {}) {
 
     // Tentar o endpoint antigo como fallback
     try {
-      console.log('Tentando endpoint fallback /admin/users');
-      const fallbackResponse = await ordersApi.get('/admin/users', {
+      console.log('Tentando endpoint fallback /api/admin/users');
+      const fallbackResponse = await ordersApi.get('/api/admin/users', {
         params: {
           page: filtros.pagina || 1,
           limit: filtros.limite || 10,
@@ -834,8 +834,8 @@ export async function buscarUsuario(id: string) {
   try {
     console.log(`Buscando detalhes do usuário ${id}`);
     
-    // Buscar detalhes do usuário na API de orders usando o endpoint existente
-    const response = await ordersApi.get(`/admin/users/${id}`);
+    // Buscar detalhes do usuário na API de orders usando o endpoint correto
+    const response = await ordersApi.get(`/api/admin/users/${id}`);
     
     if (response.data && response.data.user) {
       const user = response.data.user;
@@ -843,7 +843,7 @@ export async function buscarUsuario(id: string) {
       // Buscar métricas adicionais
       let metricas = null;
       try {
-        const metricasResponse = await ordersApi.get(`/admin/users/${id}/metrics`);
+        const metricasResponse = await ordersApi.get(`/api/admin/users/${id}/metrics`);
         metricas = metricasResponse.data?.metrics || {};
       } catch (metricasError) {
         console.error(`Erro ao buscar métricas para usuário ${id}:`, metricasError);
@@ -874,8 +874,8 @@ export async function buscarUsuario(id: string) {
     
     // Tentar o endpoint antigo como fallback
     try {
-      console.log(`Tentando endpoint fallback /admin/users/${id}`);
-      const fallbackResponse = await ordersApi.get(`/admin/users/${id}`);
+      console.log(`Tentando endpoint fallback /api/admin/users/${id}`);
+      const fallbackResponse = await ordersApi.get(`/api/admin/users/${id}`);
       
       if (fallbackResponse.data && fallbackResponse.data.user) {
         const user = fallbackResponse.data.user;
@@ -921,8 +921,8 @@ export async function buscarMetricasUsuario(id: string) {
   try {
     console.log(`Buscando métricas do usuário ${id}`);
     
-    // Buscar métricas do usuário na API de orders usando o endpoint existente
-    const response = await ordersApi.get(`/admin/users/${id}/metrics`);
+    // Buscar métricas do usuário na API de orders usando o endpoint correto
+    const response = await ordersApi.get(`/api/admin/users/${id}/metrics`);
     
     if (response.data && response.data.metrics) {
       const metrics = response.data.metrics;
@@ -943,8 +943,8 @@ export async function buscarMetricasUsuario(id: string) {
     
     // Tentar o endpoint antigo como fallback
     try {
-      console.log(`Tentando endpoint fallback /admin/users/${id}/metrics`);
-      const fallbackResponse = await ordersApi.get(`/admin/users/${id}/metrics`);
+      console.log(`Tentando endpoint fallback /api/admin/users/${id}/metrics`);
+      const fallbackResponse = await ordersApi.get(`/api/admin/users/${id}/metrics`);
       
       if (fallbackResponse.data && fallbackResponse.data.metrics) {
         const metrics = fallbackResponse.data.metrics;
