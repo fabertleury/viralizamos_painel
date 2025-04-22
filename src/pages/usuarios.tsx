@@ -44,12 +44,20 @@ const buscarUsuariosDetalhados = async (filtros: any, pagina: number, limite: nu
     
     if (filtros.tipo) queryParams.append('tipo', filtros.tipo);
     if (filtros.status) queryParams.append('status', filtros.status);
-    if (filtros.termoBusca) queryParams.append('q', filtros.termoBusca);
+    if (filtros.termoBusca) queryParams.append('termoBusca', filtros.termoBusca);
     
     queryParams.append('pagina', pagina.toString());
     queryParams.append('limite', limite.toString());
     
+    console.log(`Buscando usuários: /api/usuarios?${queryParams.toString()}`);
     const response = await fetch(`/api/usuarios?${queryParams.toString()}`);
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Erro na resposta da API:', errorData);
+      throw new Error(errorData.message || 'Erro ao buscar usuários');
+    }
+    
     return await response.json();
   } catch (error) {
     console.error('Erro ao buscar usuários:', error);

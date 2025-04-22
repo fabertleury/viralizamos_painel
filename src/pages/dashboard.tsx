@@ -42,12 +42,12 @@ interface DashboardData {
     };
   };
   atividades: Array<{
-    id: string;
-    tipo: string;
-    usuario: string;
-    item: string;
-    status: string;
-    data: string;
+  id: string;
+  tipo: string;
+  usuario: string;
+  item: string;
+  status: string;
+  data: string;
   }>;
   ultimaAtualizacao: string;
 }
@@ -106,8 +106,8 @@ function Dashboard() {
         console.error('Erro ao buscar dados do dashboard:', error);
         setError('Falha ao carregar os dados do dashboard. Por favor, tente novamente mais tarde.');
       } finally {
-        setLoading(false);
-      }
+      setLoading(false);
+    }
     };
 
     fetchDashboardData();
@@ -221,7 +221,7 @@ function Dashboard() {
 
   const pedidosChartSeries = dashboardData.graficos.statusPedidos.dados;
 
-  return (
+    return (
     <AdminLayout>
       <Box p={5}>
         <Heading as="h1" size="xl" mb={6}>Dashboard</Heading>
@@ -300,14 +300,14 @@ function Dashboard() {
             <CardContent className="p-6">
               <Heading as="h2" size="md" mb={4}>Transações (últimos 7 dias)</Heading>
               <Box height="300px">
-                {typeof window !== 'undefined' && (
-                  <Chart
-                    options={transacoesChartOptions}
-                    series={transacoesChartSeries}
-                    type="area"
+              {typeof window !== 'undefined' && (
+                <Chart
+                  options={transacoesChartOptions}
+                  series={transacoesChartSeries}
+                  type="area"
                     height="100%"
-                  />
-                )}
+                />
+              )}
               </Box>
             </CardContent>
           </Card>
@@ -317,14 +317,14 @@ function Dashboard() {
             <CardContent className="p-6">
               <Heading as="h2" size="md" mb={4}>Status dos Pedidos</Heading>
               <Box height="300px">
-                {typeof window !== 'undefined' && (
-                  <Chart
-                    options={pedidosChartOptions}
-                    series={pedidosChartSeries}
-                    type="pie"
+              {typeof window !== 'undefined' && (
+                <Chart
+                  options={pedidosChartOptions}
+                  series={pedidosChartSeries}
+                  type="pie"
                     height="100%"
-                  />
-                )}
+                />
+              )}
               </Box>
             </CardContent>
           </Card>
@@ -377,8 +377,8 @@ function Dashboard() {
             ) : (
               <Text textAlign="center" py={4}>Nenhuma atividade recente encontrada.</Text>
             )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
         {/* Informação de última atualização */}
         <Text mt={4} textAlign="right" fontSize="sm" color="gray.500">
