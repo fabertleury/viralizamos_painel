@@ -439,13 +439,13 @@ export async function buscarPedidos(
     // Usando os nomes exatos das tabelas conforme definidos no banco de dados
     // Importante: No Supabase/Prisma, as tabelas são definidas no singular mas com inicial maiúscula
     let query = `
-      SELECT 
-        o.id, 
+      SELECT
+        o.id,
         o.created_at as data_criacao,
         o.provider_id as provedor_id,
         p.name as provedor_nome,
         o.service_id as produto_id,
-        COALESCE(p.name || ' ' || o.service_type, 'Serviço não especificado') as produto_nome,
+        COALESCE(p.name, 'Serviço não especificado') as produto_nome,
         o.quantity as quantidade,
         o.amount as valor,
         o.status,
@@ -454,9 +454,9 @@ export async function buscarPedidos(
         o.customer_email as cliente_email,
         o.transaction_id as transacao_id,
         o.external_order_id as provider_order_id
-      FROM 
+      FROM
         "Order" o
-      LEFT JOIN 
+      LEFT JOIN
         "Provider" p ON o.provider_id = p.id
       WHERE 1=1
     `;
@@ -723,9 +723,38 @@ export async function obterProvedores(): Promise<Provedor[]> {
     
     // Tentar obter provedores via API
     if (ordersApiUrl && ordersApiKey) {
-      // Primeiro tentamos o endpoint público
+      // Primeiro tentamos o endpoint específico para o painel
       try {
-        console.log('Buscando provedores via endpoint público...');
+        console.log('Buscando provedores via endpoint panel-providers...');
+        const response = await axios.get(`${ordersApiUrl}/admin/panel-providers`, {
+          headers: {
+            'Authorization': `Bearer ${ordersApiKey}`
+          },
+          timeout: 10000
+        });
+
+        // Verificar se a resposta contém dados
+        if (response.data && response.data.providers && Array.isArray(response.data.providers)) {
+          console.log(`Provedores encontrados via API panel-providers: ${response.data.providers.length}`);
+          
+          return response.data.providers.map((provider: any) => ({
+            id: provider.id,
+            nome: provider.name,
+            descricao: '',
+            ativo: provider.status === true,
+            logo_url: '',
+            website: '',
+            criado_em: new Date(provider.created_at)
+          }));
+        }
+      } catch (apiError) {
+        console.error('Erro ao obter provedores via endpoint panel-providers:', apiError);
+        // Se falhar via endpoint específico, tenta os endpoints alternativos
+      }
+      
+      // Tentamos o endpoint público como fallback
+      try {
+        console.log('Buscando provedores via endpoint público (fallback)...');
         const response = await axios.get(`${ordersApiUrl}/providers`, {
           headers: {
             'Authorization': `Bearer ${ordersApiKey}`
@@ -735,64 +764,34 @@ export async function obterProvedores(): Promise<Provedor[]> {
 
         // Verificar se a resposta contém dados
         if (response.data && Array.isArray(response.data)) {
-          console.log(`Provedores encontrados via API pública: ${response.data.length}`);
+          console.log(`Provedores encontrados via API pública (fallback): ${response.data.length}`);
           
           // Mapear os dados da API para o formato esperado
           return response.data.map((provider: any) => ({
             id: provider.id,
             nome: provider.name,
-            descricao: provider.description,
-            ativo: provider.active === true,
-            logo_url: provider.logo_url,
-            website: provider.website,
+            descricao: '',
+            ativo: provider.active === true || provider.status === true,
+            logo_url: provider.logo_url || '',
+            website: provider.website || '',
             criado_em: new Date(provider.created_at)
           }));
         } else if (response.data && response.data.providers && Array.isArray(response.data.providers)) {
-          console.log(`Provedores encontrados via API pública (formato alternativo): ${response.data.providers.length}`);
+          console.log(`Provedores encontrados via API pública (fallback, formato alternativo): ${response.data.providers.length}`);
           
           return response.data.providers.map((provider: any) => ({
             id: provider.id,
             nome: provider.name,
-            descricao: provider.description,
-            ativo: provider.active === true || provider.status === 'active',
-            logo_url: provider.logo_url,
-            website: provider.website,
+            descricao: '',
+            ativo: provider.active === true || provider.status === true,
+            logo_url: provider.logo_url || '',
+            website: provider.website || '',
             criado_em: new Date(provider.created_at)
           }));
         }
-      } catch (apiError) {
-        console.error('Erro ao obter provedores via endpoint público:', apiError);
-        // Se falhar via API pública, tenta via endpoint admin
-      }
-      
-      // Tentamos o endpoint admin
-      try {
-        console.log('Buscando provedores via endpoint admin...');
-        const response = await axios.get(`${ordersApiUrl}/admin/providers`, {
-          headers: {
-            'Authorization': `Bearer ${ordersApiKey}`
-          },
-          timeout: 10000
-        });
-
-        // Verificar se a resposta contém dados
-        if (response.data && Array.isArray(response.data)) {
-          console.log(`Provedores encontrados via API admin: ${response.data.length}`);
-          
-          // Mapear os dados da API para o formato esperado
-          return response.data.map((provider: any) => ({
-            id: provider.id,
-            nome: provider.name,
-            descricao: provider.description,
-            ativo: provider.active === true,
-            logo_url: provider.logo_url,
-            website: provider.website,
-            criado_em: new Date(provider.created_at)
-          }));
-        }
-      } catch (adminApiError) {
-        console.error('Erro ao obter provedores via endpoint admin:', adminApiError);
-        // Se falhar via API admin, tenta via banco de dados
+      } catch (fallbackApiError) {
+        console.error('Erro ao obter provedores via endpoint público:', fallbackApiError);
+        // Se falhar via API pública, tenta via banco de dados
       }
     }
     
@@ -811,15 +810,12 @@ export async function obterProvedores(): Promise<Provedor[]> {
       SELECT 
         id, 
         name as nome, 
-        description as descricao, 
-        active as ativo, 
-        logo_url, 
-        website, 
+        status as ativo, 
         created_at as criado_em
       FROM 
         "Provider"
       WHERE 
-        active = true
+        status = true
       ORDER BY 
         name ASC
     `;
@@ -830,10 +826,10 @@ export async function obterProvedores(): Promise<Provedor[]> {
     return result.rows.map((row: any) => ({
       id: row.id,
       nome: row.nome,
-      descricao: row.descricao,
+      descricao: '',
       ativo: row.ativo === true,
-      logo_url: row.logo_url,
-      website: row.website,
+      logo_url: '',
+      website: '',
       criado_em: new Date(row.criado_em)
     }));
   } catch (error) {
