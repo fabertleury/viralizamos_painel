@@ -1,0 +1,3 @@
+Este arquivo é uma correção temporária para resolver o problema de páginas duplicadas.
+O erro ocorre porque tanto pages/usuarios/[id].tsx quanto pages/usuarios/[id]/index.tsx estão tentando usar a mesma rota /usuarios/[id].
+Este commit remove explicitamente o arquivo duplicado.
