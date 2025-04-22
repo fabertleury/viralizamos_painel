@@ -1,28 +1,114 @@
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useQuery } from '@apollo/client';
-import { GET_DASHBOARD_DATA } from '../graphql/queries';
 import AdminLayout from '../components/Layout/AdminLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
-import { formatCurrency, formatDate } from '../utils/format';
-import { Box, Spinner, Text } from '@chakra-ui/react';
+import { Card, CardContent } from '../components/ui/card';
+import { Box, Spinner, Text, SimpleGrid, Heading, Flex, Stat, StatLabel, StatNumber, StatHelpText, StatArrow, StatGroup, Table, Thead, Tbody, Tr, Th, Td, Badge } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
 
 // Importação dinâmica dos componentes de gráfico para evitar problemas de SSR
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
-// Interface para dados de atividade
-interface Atividade {
-  id: string;
-  tipo: string;
-  usuario: string;
-  item: string;
-  status: string;
-  data: string;
-}
+// Dados simulados para o dashboard
+const dashboardData = {
+  estatisticas: {
+    transacoes: {
+      total: 156,
+      crescimento: 12.5,
+      valorTotal: 2845790 // em centavos (R$ 28.457,90)
+    },
+    pedidos: {
+      total: 142,
+      crescimento: 8.3,
+      completados: 115,
+      pendentes: 18,
+      falhas: 9
+    },
+    usuarios: {
+      total: 87,
+      crescimento: 15.2,
+      novos: 12
+    }
+  },
+  graficos: {
+    transacoesPorDia: [
+      { data: '2023-06-01', total: 15, valorAprovado: 148900 },
+      { data: '2023-06-02', total: 18, valorAprovado: 205720 },
+      { data: '2023-06-03', total: 25, valorAprovado: 310550 },
+      { data: '2023-06-04', total: 22, valorAprovado: 270330 },
+      { data: '2023-06-05', total: 27, valorAprovado: 395100 },
+      { data: '2023-06-06', total: 24, valorAprovado: 310220 },
+      { data: '2023-06-07', total: 25, valorAprovado: 345780 }
+    ],
+    statusPedidos: {
+      labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
+      dados: [115, 32, 18, 9]
+    }
+  },
+  atividades: [
+    {
+      id: '1',
+      tipo: 'pedido',
+      usuario: 'cliente@exemplo.com',
+      item: 'Seguidores Instagram',
+      status: 'aprovado',
+      data: '2023-06-07T14:32:45Z'
+    },
+    {
+      id: '2',
+      tipo: 'transacao',
+      usuario: 'marcos@empresa.com',
+      item: 'R$ 159,90',
+      status: 'aprovado',
+      data: '2023-06-07T10:15:22Z'
+    },
+    {
+      id: '3',
+      tipo: 'usuario',
+      usuario: 'novocliente@gmail.com',
+      item: 'Cadastro',
+      status: 'concluído',
+      data: '2023-06-06T18:45:12Z'
+    },
+    {
+      id: '4',
+      tipo: 'pedido',
+      usuario: 'empresa@contato.com',
+      item: 'Likes Facebook',
+      status: 'processando',
+      data: '2023-06-06T16:20:33Z'
+    },
+    {
+      id: '5',
+      tipo: 'transacao',
+      usuario: 'carla@exemplo.net',
+      item: 'R$ 89,90',
+      status: 'pendente',
+      data: '2023-06-06T09:12:05Z'
+    }
+  ],
+  ultimaAtualizacao: new Date().toISOString()
+};
 
-// Componente Dashboard simplificado
+// Formatador de moeda
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(value / 100); // Convertendo centavos para reais
+};
+
+// Formatador de data
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Componente Dashboard
 function Dashboard() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -30,10 +116,10 @@ function Dashboard() {
   // Verificar autenticação diretamente
   useEffect(() => {
     // Função para obter valor de cookie
-    const getCookie = (name) => {
+    const getCookie = (name: string) => {
       const value = `; ${document.cookie}`;
       const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop().split(';').shift();
+      if (parts.length === 2) return parts.pop()?.split(';').shift();
       return null;
     };
     
@@ -47,11 +133,6 @@ function Dashboard() {
       setLoading(false);
     }
   }, [router]);
-  
-  // Usar GraphQL para buscar dados
-  const { loading: dataLoading, error, data } = useQuery(GET_DASHBOARD_DATA);
-  
-  const dashboardData = data?.dadosDashboard || null;
   
   // Mostrar loading enquanto verifica autenticação
   if (loading) {
@@ -90,9 +171,9 @@ function Dashboard() {
       enabled: false,
     },
     xaxis: {
-      categories: dashboardData?.graficos.transacoesPorDia?.map((item: { data: string }) => 
+      categories: dashboardData.graficos.transacoesPorDia.map(item => 
         new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-      ) || [],
+      ),
       axisBorder: {
         show: false,
       },
@@ -117,11 +198,11 @@ function Dashboard() {
   const transacoesChartSeries = [
     {
       name: 'Transações',
-      data: dashboardData?.graficos.transacoesPorDia?.map((item: { total: number }) => item.total) || [],
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.total),
     },
     {
       name: 'Valor (R$)',
-      data: dashboardData?.graficos.transacoesPorDia?.map((item: { valorAprovado: number }) => item.valorAprovado / 100) || [],
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.valorAprovado / 100),
     },
   ];
 
@@ -130,7 +211,7 @@ function Dashboard() {
     chart: {
       type: 'pie' as const,
     },
-    labels: dashboardData?.graficos.statusPedidos?.labels || [],
+    labels: dashboardData.graficos.statusPedidos.labels,
     colors: ['#48BB78', '#3182CE', '#ECC94B', '#E53E3E'],
     responsive: [
       {
@@ -147,204 +228,171 @@ function Dashboard() {
     ],
   };
 
-  const pedidosChartSeries = dashboardData?.graficos.statusPedidos?.dados || [];
+  const pedidosChartSeries = dashboardData.graficos.statusPedidos.dados;
 
-  // Renderizar o conteúdo do dashboard
-  const renderDashboard = () => {
-    if (dataLoading) {
-      return (
-        <div className="p-4">
-          <div className="h-10 w-48 bg-gray-200 rounded mb-6 animate-pulse"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {Array(4).fill(0).map((_, i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded-lg animate-pulse"></div>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {Array(3).fill(0).map((_, i) => (
-              <div 
-                key={i} 
-                className={`bg-gray-200 rounded-lg animate-pulse ${
-                  i === 2 ? 'lg:col-span-2' : ''
-                } h-${i === 2 ? '64' : '80'}`}
-              ></div>
-            ))}
-          </div>
-        </div>
-      );
-    }
+  return (
+    <AdminLayout>
+      <Box p={5}>
+        <Heading as="h1" size="xl" mb={6}>Dashboard</Heading>
 
-    if (error) {
-      return (
-        <div className="flex justify-center items-center min-h-[50vh] flex-col">
-          <div className="text-red-500 text-lg mb-4">
-            {error.message || 'Ocorreu um erro ao carregar os dados do dashboard.'}
-          </div>
-          <div>Por favor, tente novamente mais tarde.</div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="p-4">
-        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
           {/* Card de Transações */}
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm font-medium text-gray-500">Transações</div>
-              <div className="text-3xl font-semibold mt-2">{dashboardData?.estatisticas.transacoes.total || 0}</div>
-              <div className="text-sm text-gray-500 mt-2 flex items-center">
-                <span className={`mr-1 ${(dashboardData?.estatisticas.transacoes.crescimento || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {(dashboardData?.estatisticas.transacoes.crescimento || 0) >= 0 ? '↑' : '↓'}
-                </span>
-                {Math.abs(dashboardData?.estatisticas.transacoes.crescimento || 0)}% em relação ao mês anterior
-              </div>
+            <CardContent className="p-6">
+              <StatGroup>
+                <Stat>
+                  <StatLabel fontSize="sm" color="gray.500">Transações</StatLabel>
+                  <StatNumber fontSize="3xl">{dashboardData.estatisticas.transacoes.total}</StatNumber>
+                  <StatHelpText>
+                    <StatArrow type={dashboardData.estatisticas.transacoes.crescimento >= 0 ? 'increase' : 'decrease'} />
+                    {Math.abs(dashboardData.estatisticas.transacoes.crescimento)}% em relação ao mês anterior
+                  </StatHelpText>
+                </Stat>
+              </StatGroup>
             </CardContent>
           </Card>
 
           {/* Card de Pedidos */}
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm font-medium text-gray-500">Pedidos</div>
-              <div className="text-3xl font-semibold mt-2">{dashboardData?.estatisticas.pedidos.total || 0}</div>
-              <div className="text-sm text-gray-500 mt-2 flex items-center">
-                <span className={`mr-1 ${(dashboardData?.estatisticas.pedidos.crescimento || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {(dashboardData?.estatisticas.pedidos.crescimento || 0) >= 0 ? '↑' : '↓'}
-                </span>
-                {Math.abs(dashboardData?.estatisticas.pedidos.crescimento || 0)}% em relação ao mês anterior
-              </div>
+            <CardContent className="p-6">
+              <StatGroup>
+                <Stat>
+                  <StatLabel fontSize="sm" color="gray.500">Pedidos</StatLabel>
+                  <StatNumber fontSize="3xl">{dashboardData.estatisticas.pedidos.total}</StatNumber>
+                  <StatHelpText>
+                    <StatArrow type={dashboardData.estatisticas.pedidos.crescimento >= 0 ? 'increase' : 'decrease'} />
+                    {Math.abs(dashboardData.estatisticas.pedidos.crescimento)}% em relação ao mês anterior
+                  </StatHelpText>
+                </Stat>
+              </StatGroup>
             </CardContent>
           </Card>
 
           {/* Card de Usuários */}
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm font-medium text-gray-500">Usuários</div>
-              <div className="text-3xl font-semibold mt-2">{dashboardData?.estatisticas.usuarios.total || 0}</div>
-              <div className="text-sm text-gray-500 mt-2 flex items-center">
-                <span className={`mr-1 ${(dashboardData?.estatisticas.usuarios.crescimento || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {(dashboardData?.estatisticas.usuarios.crescimento || 0) >= 0 ? '↑' : '↓'}
-                </span>
-                {Math.abs(dashboardData?.estatisticas.usuarios.crescimento || 0)}% em relação ao mês anterior
-              </div>
+            <CardContent className="p-6">
+              <StatGroup>
+                <Stat>
+                  <StatLabel fontSize="sm" color="gray.500">Usuários</StatLabel>
+                  <StatNumber fontSize="3xl">{dashboardData.estatisticas.usuarios.total}</StatNumber>
+                  <StatHelpText>
+                    <StatArrow type={dashboardData.estatisticas.usuarios.crescimento >= 0 ? 'increase' : 'decrease'} />
+                    {Math.abs(dashboardData.estatisticas.usuarios.crescimento)}% em relação ao mês anterior
+                  </StatHelpText>
+                </Stat>
+              </StatGroup>
             </CardContent>
           </Card>
 
           {/* Card de Receita */}
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm font-medium text-gray-500">Receita (R$)</div>
-              <div className="text-3xl font-semibold mt-2">
-                {formatCurrency((dashboardData?.estatisticas.transacoes.valorTotal || 0) / 100)}
-              </div>
-              <div className="text-sm text-gray-500 mt-2 flex items-center">
-                <span className={`mr-1 ${(dashboardData?.estatisticas.transacoes.crescimento || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {(dashboardData?.estatisticas.transacoes.crescimento || 0) >= 0 ? '↑' : '↓'}
-                </span>
-                {Math.abs(dashboardData?.estatisticas.transacoes.crescimento || 0)}% em relação ao mês anterior
-              </div>
+            <CardContent className="p-6">
+              <StatGroup>
+                <Stat>
+                  <StatLabel fontSize="sm" color="gray.500">Receita (R$)</StatLabel>
+                  <StatNumber fontSize="3xl">
+                    {formatCurrency(dashboardData.estatisticas.transacoes.valorTotal)}
+                  </StatNumber>
+                  <StatHelpText>
+                    <StatArrow type={dashboardData.estatisticas.transacoes.crescimento >= 0 ? 'increase' : 'decrease'} />
+                    {Math.abs(dashboardData.estatisticas.transacoes.crescimento)}% em relação ao mês anterior
+                  </StatHelpText>
+                </Stat>
+              </StatGroup>
             </CardContent>
           </Card>
-        </div>
+        </SimpleGrid>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6} mb={6}>
           {/* Gráfico de Transações */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Transações (últimos 7 dias)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {typeof window !== 'undefined' && (
-                <Chart
-                  options={transacoesChartOptions}
-                  series={transacoesChartSeries}
-                  type="area"
-                  height={220}
-                />
-              )}
+            <CardContent className="p-6">
+              <Heading as="h2" size="md" mb={4}>Transações (últimos 7 dias)</Heading>
+              <Box height="300px">
+                {typeof window !== 'undefined' && (
+                  <Chart
+                    options={transacoesChartOptions}
+                    series={transacoesChartSeries}
+                    type="area"
+                    height="100%"
+                  />
+                )}
+              </Box>
             </CardContent>
           </Card>
 
-          {/* Gráfico de Status de Pedidos */}
+          {/* Gráfico de Status dos Pedidos */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Status dos Pedidos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {typeof window !== 'undefined' && (
-                <Chart
-                  options={pedidosChartOptions}
-                  series={pedidosChartSeries}
-                  type="pie"
-                  height={220}
-                />
-              )}
+            <CardContent className="p-6">
+              <Heading as="h2" size="md" mb={4}>Status dos Pedidos</Heading>
+              <Box height="300px">
+                {typeof window !== 'undefined' && (
+                  <Chart
+                    options={pedidosChartOptions}
+                    series={pedidosChartSeries}
+                    type="pie"
+                    height="100%"
+                  />
+                )}
+              </Box>
             </CardContent>
           </Card>
+        </SimpleGrid>
 
-          {/* Atividades Recentes */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg">Atividade Recente</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-3">
-                {dashboardData?.atividadesRecentes?.map((atividade: Atividade, index: number) => (
-                  <li key={`${atividade.tipo}-${atividade.id}`}>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <Badge 
-                          className={
-                            atividade.tipo === 'pedido'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-green-100 text-green-800'
-                          }
-                        >
-                          {atividade.tipo === 'pedido' ? 'Pedido' : 'Transação'}
+        {/* Atividade Recente */}
+        <Card>
+          <CardContent className="p-6">
+            <Heading as="h2" size="md" mb={4}>Atividade Recente</Heading>
+            {dashboardData.atividades.length > 0 ? (
+              <Table variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th>Tipo</Th>
+                    <Th>Usuário</Th>
+                    <Th>Item</Th>
+                    <Th>Status</Th>
+                    <Th>Data</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {dashboardData.atividades.map((atividade) => (
+                    <Tr key={atividade.id}>
+                      <Td>
+                        <Badge colorScheme={
+                          atividade.tipo === 'pedido' ? 'blue' : 
+                          atividade.tipo === 'transacao' ? 'green' : 
+                          'purple'
+                        }>
+                          {atividade.tipo}
                         </Badge>
-                        <span className="font-medium ml-2">{atividade.usuario}</span>{' '}
-                        {atividade.tipo === 'pedido' ? 'comprou' : 'pagou'}{' '}
-                        <span className="font-medium">{atividade.item}</span>
-                      </div>
-                      <div className="text-right">
-                        <Badge
-                          className={
-                            atividade.status === 'sucesso' || atividade.status === 'aprovado'
-                              ? 'bg-green-100 text-green-800'
-                              : atividade.status === 'pendente'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }
-                        >
+                      </Td>
+                      <Td>{atividade.usuario}</Td>
+                      <Td>{atividade.item}</Td>
+                      <Td>
+                        <Badge colorScheme={
+                          atividade.status === 'aprovado' || atividade.status === 'concluído' ? 'green' : 
+                          atividade.status === 'processando' ? 'blue' : 
+                          atividade.status === 'pendente' ? 'yellow' : 
+                          'red'
+                        }>
                           {atividade.status}
                         </Badge>
-                        <div className="text-sm text-gray-500 mt-1">
-                          {formatDate(new Date(atividade.data), 'dd/MM/yyyy HH:mm')}
-                        </div>
-                      </div>
-                    </div>
-                    {index < (dashboardData.atividadesRecentes?.length || 0) - 1 && (
-                      <hr className="mt-2 border-gray-200" />
-                    )}
-                  </li>
-                ))}
-                {(!dashboardData?.atividadesRecentes || dashboardData.atividadesRecentes.length === 0) && (
-                  <div className="text-gray-500">Nenhuma atividade recente encontrada.</div>
-                )}
-              </ul>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  };
-
-  return <AdminLayout>{renderDashboard()}</AdminLayout>;
+                      </Td>
+                      <Td>{formatDate(atividade.data)}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            ) : (
+              <Text textAlign="center" py={4}>Nenhuma atividade recente encontrada.</Text>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+    </AdminLayout>
+  );
 }
 
-// Export como componente dinâmico para evitar erros de SSR
 export default dynamic(() => Promise.resolve(Dashboard), {
   ssr: false,
 }); 

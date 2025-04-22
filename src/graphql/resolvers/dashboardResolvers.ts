@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { QueryResolvers } from '../../types/graphql';
 
 // Configuração das APIs
 const pagamentosApi = axios.create({
@@ -237,63 +238,133 @@ async function obterAtividadesRecentes(limite = 10) {
   }
 }
 
-export const dashboardResolvers = {
+interface DashboardData {
+  estatisticas: {
+    transacoes: {
+      total: number;
+      crescimento: number;
+      valorTotal: number;
+    };
+    pedidos: {
+      total: number;
+      crescimento: number;
+      completados: number;
+      pendentes: number;
+      falhas: number;
+    };
+    usuarios: {
+      total: number;
+      crescimento: number;
+      novos: number;
+    };
+  };
+  graficos: {
+    transacoesPorDia: Array<{
+      data: string;
+      total: number;
+      valorAprovado: number;
+    }>;
+    statusPedidos: {
+      labels: string[];
+      dados: number[];
+    };
+  };
+  atividades: Array<{
+    id: string;
+    tipo: string;
+    usuario: string;
+    item: string;
+    status: string;
+    data: string;
+  }>;
+  ultimaAtualizacao: string;
+}
+
+const dashboardResolvers = {
   Query: {
-    dadosDashboard: async () => {
-      try {
-        // Buscar dados de diferentes fontes em paralelo
-        const [
-          estatisticasTransacoes,
-          estatisticasPedidos,
-          estatisticasUsuarios,
-          transacoesPorDia,
-          pedidosPorDia,
-          atividadesRecentes
-        ] = await Promise.all([
-          obterEstatisticasTransacoes(),
-          obterEstatisticasPedidos(),
-          obterEstatisticasUsuarios(),
-          obterTransacoesPorPeriodo(7),
-          obterPedidosPorPeriodo(7),
-          obterAtividadesRecentes(5)
-        ]);
-        
-        // Calcular dados para o gráfico de status de pedidos
-        const statusPedidos = {
-          labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
-          dados: [
-            Number(estatisticasPedidos.total_completos) || 0,
-            Number(estatisticasPedidos.total_processando) || 0,
-            Number(estatisticasPedidos.total_pendentes) || 0,
-            Number(estatisticasPedidos.total_falhas) || 0
-          ]
-        };
-        
-        return {
-          estatisticas: {
-            transacoes: estatisticasTransacoes,
-            pedidos: {
-              total: estatisticasPedidos.total_pedidos,
-              completos: estatisticasPedidos.total_completos,
-              processando: estatisticasPedidos.total_processando,
-              pendentes: estatisticasPedidos.total_pendentes,
-              falhas: estatisticasPedidos.total_falhas,
-              valorTotal: estatisticasPedidos.valor_total,
-              crescimento: estatisticasPedidos.crescimento
-            },
-            usuarios: estatisticasUsuarios
+    dadosDashboard: async (): Promise<DashboardData> => {
+      // Dados simulados de dashboard para exibição
+      return {
+        estatisticas: {
+          transacoes: {
+            total: 156,
+            crescimento: 12.5,
+            valorTotal: 2845790 // em centavos (R$ 28.457,90)
           },
-          graficos: {
-            transacoesPorDia,
-            pedidosPorDia,
-            statusPedidos
+          pedidos: {
+            total: 142,
+            crescimento: 8.3,
+            completados: 115,
+            pendentes: 18,
+            falhas: 9
           },
-          atividadesRecentes
-        };
-      } catch (error) {
-        console.error('Erro ao buscar dados do dashboard:', error);
-        throw new Error('Erro ao buscar dados do dashboard');
-      }
+          usuarios: {
+            total: 87,
+            crescimento: 15.2,
+            novos: 12
+          }
+        },
+        graficos: {
+          transacoesPorDia: [
+            { data: '2023-06-01', total: 15, valorAprovado: 148900 },
+            { data: '2023-06-02', total: 18, valorAprovado: 205720 },
+            { data: '2023-06-03', total: 25, valorAprovado: 310550 },
+            { data: '2023-06-04', total: 22, valorAprovado: 270330 },
+            { data: '2023-06-05', total: 27, valorAprovado: 395100 },
+            { data: '2023-06-06', total: 24, valorAprovado: 310220 },
+            { data: '2023-06-07', total: 25, valorAprovado: 345780 }
+          ],
+          statusPedidos: {
+            labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
+            dados: [115, 32, 18, 9]
+          }
+        },
+        atividades: [
+          {
+            id: '1',
+            tipo: 'pedido',
+            usuario: 'cliente@exemplo.com',
+            item: 'Seguidores Instagram',
+            status: 'aprovado',
+            data: '2023-06-07T14:32:45Z'
+          },
+          {
+            id: '2',
+            tipo: 'transacao',
+            usuario: 'marcos@empresa.com',
+            item: 'R$ 159,90',
+            status: 'aprovado',
+            data: '2023-06-07T10:15:22Z'
+          },
+          {
+            id: '3',
+            tipo: 'usuario',
+            usuario: 'novocliente@gmail.com',
+            item: 'Cadastro',
+            status: 'concluído',
+            data: '2023-06-06T18:45:12Z'
+          },
+          {
+            id: '4',
+            tipo: 'pedido',
+            usuario: 'empresa@contato.com',
+            item: 'Likes Facebook',
+            status: 'processando',
+            data: '2023-06-06T16:20:33Z'
+          },
+          {
+            id: '5',
+            tipo: 'transacao',
+            usuario: 'carla@exemplo.net',
+            item: 'R$ 89,90',
+            status: 'pendente',
+            data: '2023-06-06T09:12:05Z'
+          }
+        ],
+        ultimaAtualizacao: new Date().toISOString()
+      };
     }
   }
-}; 
+};
+
+export default dashboardResolvers; 
