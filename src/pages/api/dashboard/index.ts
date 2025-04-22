@@ -96,14 +96,14 @@ async function obterEstatisticasPedidos() {
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pedidos_pendentes,
         SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) as pedidos_cancelados,
         SUM(amount) as valor_total_pedidos
-      FROM "orders"
+      FROM "Order"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
     // Dados do mês anterior
     const queryAnterior = `
       SELECT COUNT(*) as total_mes_anterior
-      FROM "orders"
+      FROM "Order"
       WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
     `;
     
@@ -222,30 +222,34 @@ async function obterEstatisticasTransacoes() {
 
 async function obterEstatisticasUsuarios() {
   try {
-    // Consulta para obter o total de usuários (real)
+    // Consulta para obter o total de usuários distintos dos pedidos
     const totalQuery = `
-      SELECT COUNT(*) as total
-      FROM "users"
+      SELECT COUNT(DISTINCT user_id) as total
+      FROM "Order"
+      WHERE user_id IS NOT NULL
     `;
     
     // Consulta para obter usuários novos nos últimos 30 dias (real)
     const novosQuery = `
-      SELECT COUNT(*) as novos
-      FROM "users"
+      SELECT COUNT(DISTINCT user_id) as novos
+      FROM "Order"
       WHERE created_at >= NOW() - INTERVAL '30 days'
+      AND user_id IS NOT NULL
     `;
     
     // Consulta para obter usuários no mês anterior para calcular crescimento
     const mesAnteriorQuery = `
-      SELECT COUNT(*) as total_mes_anterior
-      FROM "users"
-      WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
+      SELECT COUNT(DISTINCT user_id) as total_mes_anterior
+      FROM "Order"
+      WHERE created_at >= NOW() - INTERVAL '60 days' 
+      AND created_at < NOW() - INTERVAL '30 days'
+      AND user_id IS NOT NULL
     `;
     
     const [totalResult, novosResult, mesAnteriorResult] = await Promise.all([
-      pagamentosPool.query(totalQuery),
-      pagamentosPool.query(novosQuery),
-      pagamentosPool.query(mesAnteriorQuery)
+      ordersPool.query(totalQuery),
+      ordersPool.query(novosQuery),
+      ordersPool.query(mesAnteriorQuery)
     ]);
     
     const total = parseInt(totalResult.rows[0].total || '0');
@@ -282,7 +286,7 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
         COUNT(*) as total,
         SUM(amount) as valor_total
       FROM 
-        "orders"
+        "Order"
       WHERE 
         created_at >= NOW() - INTERVAL '${dias} days'
       GROUP BY 
@@ -352,14 +356,12 @@ async function obterAtividadesRecentes(limite: number = 10) {
         'pedido' as tipo,
         o.id,
         o.created_at as data,
-        u.name as usuario,
+        o.customer_name as usuario,
         o.service_id as item,
         o.status,
         o.amount as valor
       FROM 
-        "orders" o
-      LEFT JOIN 
-        "users" u ON o.user_id = u.id
+        "Order" o
       ORDER BY 
         o.created_at DESC
       LIMIT $1
