@@ -544,23 +544,106 @@ export async function buscarPedidos(
   }
 }
 
+// Interface para detalhes completos de um pedido
+export interface PedidoDetalhado extends Pedido {
+  logs?: Array<{
+    id: string;
+    level: string;
+    message: string;
+    data?: any;
+    created_at: Date;
+  }>;
+  cliente?: {
+    id: string;
+    nome: string;
+    email: string;
+  };
+  metadata?: any;
+  provider_response?: any;
+  target_username?: string;
+  target_url?: string;
+}
+
 // Função para buscar um pedido específico
-export async function buscarPedidoPorId(id: string): Promise<Pedido | null> {
-  // Obter o pool de conexão através da função testarConexaoDB
-  const { success, pool } = await testarConexaoDB();
-  if (!success || !pool) {
-    throw new Error('Pool de conexão não inicializado');
-  }
-  
+export async function buscarPedidoPorId(id: string): Promise<PedidoDetalhado | null> {
+  console.log(`Buscando detalhes do pedido ${id}...`);
+  const ordersApiUrl = process.env.ORDERS_API_URL || 'https://orders.viralizamos.com/api';
+  const ordersApiKey = process.env.ORDERS_API_KEY || 'vrlzms_api_3ac5b8def47921e6a8b459f45d3c7a2fedcb1284';
+
   try {
+    // Tentando acessar a API para buscar detalhes do pedido
+    console.log(`Tentando acessar o endpoint panel-orders/${id} para buscar detalhes do pedido...`);
+    const response = await axios.get(`${ordersApiUrl}/admin/panel-orders/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${ordersApiKey}`
+      },
+      timeout: 10000
+    });
+
+    // Se a resposta for bem-sucedida, retornamos os dados
+    if (response.data && response.data.order) {
+      console.log(`Detalhes do pedido ${id} obtidos com sucesso via API`);
+      
+      const pedido = response.data.order;
+      
+      // Mapear os dados para o formato esperado
+      return {
+        id: pedido.id,
+        data_criacao: new Date(pedido.created_at),
+        provedor_id: pedido.provider_id,
+        provedor_nome: pedido.provider?.name || 'Provedor não especificado',
+        produto_id: pedido.service_id,
+        produto_nome: pedido.provider?.name || 'Serviço não especificado',
+        quantidade: pedido.quantity,
+        valor: pedido.amount,
+        status: pedido.status,
+        cliente_id: pedido.user_id,
+        cliente_nome: pedido.customer_name,
+        cliente_email: pedido.customer_email,
+        transacao_id: pedido.transaction_id,
+        provider_order_id: pedido.external_order_id,
+        target_username: pedido.target_username,
+        target_url: pedido.target_url,
+        logs: pedido.logs?.map((log: any) => ({
+          id: log.id,
+          level: log.level,
+          message: log.message,
+          data: log.data,
+          created_at: new Date(log.created_at)
+        })),
+        cliente: pedido.user ? {
+          id: pedido.user.id,
+          nome: pedido.user.name || '',
+          email: pedido.user.email
+        } : undefined,
+        metadata: pedido.metadata,
+        provider_response: pedido.provider_response
+      };
+    }
+  } catch (apiError) {
+    console.error(`Erro ao buscar detalhes do pedido ${id} via API:`, apiError);
+    // Se falhar via API, tenta via banco de dados
+  }
+
+  // Se não conseguiu via API, tenta via banco de dados
+  try {
+    console.log(`Tentando buscar detalhes do pedido ${id} via banco de dados...`);
+    const { success, pool } = await testarConexaoDB();
+    
+    if (!success || !pool) {
+      console.error('Falha na conexão com o banco de dados');
+      return null;
+    }
+    
+    // Consulta para buscar detalhes do pedido
     const query = `
-      SELECT 
-        o.id, 
-        o.created_at as data_criacao, 
+      SELECT
+        o.id,
+        o.created_at as data_criacao,
         o.provider_id as provedor_id,
         p.name as provedor_nome,
         o.service_id as produto_id,
-        o.service_type as produto_nome,
+        COALESCE(p.name, 'Serviço não especificado') as produto_nome,
         o.quantity as quantidade,
         o.amount as valor,
         o.status,
@@ -568,25 +651,65 @@ export async function buscarPedidoPorId(id: string): Promise<Pedido | null> {
         o.customer_name as cliente_nome,
         o.customer_email as cliente_email,
         o.transaction_id as transacao_id,
-        o.external_order_id as provider_order_id
-      FROM 
+        o.external_order_id as provider_order_id,
+        o.target_username,
+        o.target_url,
+        o.metadata,
+        o.provider_response
+      FROM
         "Order" o
-      LEFT JOIN 
+      LEFT JOIN
         "Provider" p ON o.provider_id = p.id
-      WHERE 
+      WHERE
         o.id = $1
     `;
     
-    const result = await ordersPool.query(query, [id]);
+    const result = await pool.query(query, [id]);
     
     if (result.rows.length === 0) {
+      console.log(`Pedido ${id} não encontrado no banco de dados`);
       return null;
     }
     
-    return result.rows[0];
-  } catch (error) {
-    console.error(`Erro ao buscar pedido ${id}:`, error);
-    throw new Error(`Erro ao buscar pedido ${id}`);
+    console.log(`Detalhes do pedido ${id} obtidos com sucesso via banco de dados`);
+    
+    const pedido = result.rows[0];
+    
+    // Buscar logs do pedido
+    const logsQuery = `
+      SELECT
+        id,
+        level,
+        message,
+        data,
+        created_at
+      FROM
+        "OrderLog"
+      WHERE
+        order_id = $1
+      ORDER BY
+        created_at DESC
+    `;
+    
+    const logsResult = await pool.query(logsQuery, [id]);
+    
+    return {
+      ...pedido,
+      logs: logsResult.rows.map((log: any) => ({
+        id: log.id,
+        level: log.level,
+        message: log.message,
+        data: log.data,
+        created_at: new Date(log.created_at)
+      })),
+      metadata: pedido.metadata || {},
+      provider_response: pedido.provider_response || {}
+    };
+  } catch (dbError) {
+    console.error(`Erro ao buscar detalhes do pedido ${id} via banco de dados:`, dbError);
+    console.log('Mensagem de erro:', (dbError as Error).message);
+    console.log('Stack trace:', (dbError as Error).stack);
+    return null;
   }
 }
 
