@@ -60,6 +60,13 @@ export async function fetchDetailedUsers(
   limit: number = 10
 ): Promise<PaginatedUsersResponse> {
   try {
+    // Obter token de autenticação do localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    
+    if (!token) {
+      throw new Error('Token de autorização não encontrado. Faça login novamente.');
+    }
+    
     // Construir parâmetros da query
     const params = new URLSearchParams();
     
@@ -74,19 +81,76 @@ export async function fetchDetailedUsers(
     params.append('page', page.toString());
     params.append('limit', limit.toString());
     
+    // Configuração do header de autorização
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+    
     // Tentar primeiro com a API de orders
     try {
-      const response = await ordersApi.get(`/api/api/admin/panel-users?${params.toString()}`);
+      console.log('Tentando acessar a API de orders com token de autorização');
+      const response = await ordersApi.get(`/api/api/admin/panel-users?${params.toString()}`, {
+        headers: headers
+      });
       return response.data;
     } catch (ordersError) {
       console.error('Erro ao buscar usuários via API de orders:', ordersError);
       
       // Fallback para API local
-      const response = await axios.get(`/api/admin/panel-users?${params.toString()}`);
+      console.log('Tentando acessar a API local com token de autorização');
+      const response = await axios.get(`/api/admin/panel-users?${params.toString()}`, {
+        headers: headers
+      });
       return response.data;
     }
   } catch (error) {
     console.error('Erro ao buscar usuários detalhados:', error);
+    throw new Error(handleApiError(error));
+  }
+}
+
+/**
+ * Busca detalhes de um usuário específico pelo ID
+ * @param userId ID do usuário a ser buscado
+ * @returns Detalhes do usuário com métricas
+ */
+export async function fetchUserDetails(userId: string): Promise<DetailedUser> {
+  try {
+    // Obter token de autenticação do localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    
+    if (!token) {
+      throw new Error('Token de autorização não encontrado. Faça login novamente.');
+    }
+    
+    // Configuração do header de autorização
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+    
+    console.log(`Buscando detalhes do usuário: ${userId}`);
+    
+    // Tentar primeiro com a API de orders
+    try {
+      console.log('Tentando acessar a API de orders para detalhes do usuário');
+      const response = await ordersApi.get(`/api/api/admin/panel-users/user/${userId}`, {
+        headers: headers
+      });
+      return response.data;
+    } catch (ordersError) {
+      console.error('Erro ao buscar detalhes do usuário via API de orders:', ordersError);
+      
+      // Fallback para API local
+      console.log('Tentando acessar a API local para detalhes do usuário');
+      const response = await axios.get(`/api/usuarios/${userId}/detalhes`, {
+        headers: headers
+      });
+      return response.data;
+    }
+  } catch (error) {
+    console.error('Erro ao buscar detalhes do usuário:', error);
     throw new Error(handleApiError(error));
   }
 } 

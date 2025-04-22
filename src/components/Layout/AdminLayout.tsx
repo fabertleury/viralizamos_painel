@@ -15,8 +15,7 @@ import {
   RefreshCw,
   FileText,
   UserPlus,
-  AlertCircle,
-  UserCheck
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
@@ -34,7 +33,6 @@ const LinkItems: Array<LinkItemProps> = [
   { name: 'Transações', icon: DollarSign, href: '/transacoes' },
   { name: 'Pedidos', icon: ShoppingCart, href: '/pedidos' },
   { name: 'Usuários', icon: Users, href: '/usuarios' },
-  { name: 'Usuários Detalhados', icon: UserCheck, href: '/admin/usuarios' },
   { name: 'Logs', icon: AlertCircle, href: '/logs' },
   { name: 'Documentação API', icon: FileText, href: '/api-docs' },
   { name: 'Adicionar Admin', icon: UserPlus, href: '/admin/adicionar' },

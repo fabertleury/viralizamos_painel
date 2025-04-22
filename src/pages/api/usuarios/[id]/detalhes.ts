@@ -11,14 +11,29 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // Verificar autenticação
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Não autorizado' });
+      console.error('Token não fornecido ou formato inválido:', authHeader);
+      return res.status(401).json({ 
+        message: 'Não autorizado', 
+        error: 'Token de autorização não fornecido ou em formato inválido (deve ser Bearer Token)'
+      });
     }
 
     const token = authHeader.substring(7);
-    const tokenData = await verifyJwtToken(token);
-
-    if (!tokenData) {
-      return res.status(401).json({ message: 'Token inválido' });
+    console.log('Token recebido (detalhes):', token.substring(0, 10) + '...');
+    
+    // Verificar token JWT
+    try {
+      const tokenData = await verifyJwtToken(token);
+      if (!tokenData) {
+        console.error('Token JWT inválido');
+        return res.status(401).json({ message: 'Token inválido' });
+      }
+    } catch (tokenError) {
+      console.error('Erro ao verificar token JWT:', tokenError);
+      return res.status(401).json({ 
+        message: 'Token inválido',
+        error: tokenError instanceof Error ? tokenError.message : 'Erro na verificação do token'
+      });
     }
 
     // Obter ID do usuário da URL
@@ -28,27 +43,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ message: 'ID de usuário inválido' });
     }
 
-    // Verificar se o usuário tem permissão para ver estas métricas
-    // Apenas administradores ou o próprio usuário podem ver as métricas
-    if (tokenData.role !== 'admin' && tokenData.id !== id) {
-      return res.status(403).json({ message: 'Acesso negado' });
-    }
+    // Configurar headers para API de orders
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'ApiKey': process.env.ORDERS_API_KEY || process.env.API_KEY || '' // Adicionar API Key para maior segurança
+    };
 
     // Buscar dados detalhados do usuário através do panel-users API
     try {
-      // Primeiro, tente buscar usando o serviço de orders
-      // Este request é especial - precisamos buscar um usuário específico por ID
-      // Vamos manipular os parâmetros para filtrar pelo ID específico
-      const searchParams = new URLSearchParams();
-      searchParams.append('user_id', id);
+      console.log(`Buscando detalhes do usuário ${id} da API de orders`);
       
-      // Chamar a API
-      const response = await ordersApi.get(`/api/admin/panel-users/user/${id}`);
+      // Chamada para a API específica de usuário por ID
+      const endpoint = `/api/admin/panel-users/user/${id}`;
+      console.log('Chamando endpoint:', endpoint);
+      
+      const response = await ordersApi.get(endpoint, { headers });
+      
+      console.log('Detalhes do usuário obtidos com sucesso');
       return res.status(200).json(response.data);
     } catch (ordersError) {
       console.error('Erro ao buscar detalhes da API de orders:', ordersError);
       
+      // Se for erro de autenticação, retornar status 401
+      if (ordersError.response?.status === 401) {
+        return res.status(401).json({
+          message: 'Não autorizado no sistema de orders',
+          error: 'Token inválido ou sem permissão suficiente'
+        });
+      }
+      
       // Fallback: Importar função do serviço de usuários
+      console.log('Usando fallback com serviços locais para o usuário:', id);
       const { buscarUsuarioPorIdDetalhado } = await import('../../../../services/usuariosService');
       
       // Buscar dados do usuário dos serviços locais
@@ -61,6 +87,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       // Estruturar dados no formato compatível com o panel-users
       const { buscarMetricasUsuario } = await import('../../../../services/usuariosService');
       const metricas = await buscarMetricasUsuario(id);
+      
+      console.log('Dados locais obtidos, convertendo para formato compatível');
       
       // Converter para o formato compatível com panel-users
       const detalhesUsuario = {

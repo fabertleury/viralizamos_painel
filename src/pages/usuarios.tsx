@@ -31,98 +31,33 @@ import {
   Spinner,
   useToast,
 } from '@chakra-ui/react';
-import { FiSearch, FiFilter, FiMoreVertical, FiEdit, FiTrash2, FiMail, FiUserPlus } from 'react-icons/fi';
+import { FiSearch, FiFilter, FiMoreVertical, FiEdit, FiTrash2, FiMail, FiUserPlus, FiEye } from 'react-icons/fi';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 
-// Importar o serviço de usuários
-import { buscarUsuarios as buscarUsuariosService } from '../services/usuariosService';
-
-// Função para buscar usuários detalhados com fallback para API direta
-const buscarUsuariosDetalhados = async (filtros: any, pagina: number, limite: number) => {
-  try {
-    console.log('Buscando usuários com filtros:', filtros, 'página:', pagina, 'limite:', limite);
-    
-    // Primeiro, tentar usar o serviço de usuários diretamente
-    try {
-      const resultado = await buscarUsuariosService({
-        tipo: filtros.tipo,
-        status: filtros.status,
-        termoBusca: filtros.termoBusca,
-        pagina: pagina,
-        limite: limite
-      });
-      
-      console.log('Resultado da busca de usuários via serviço:', resultado);
-      if (resultado && resultado.usuarios && resultado.usuarios.length > 0) {
-        return resultado;
-      }
-    } catch (serviceError) {
-      console.error('Erro ao usar serviço de usuários:', serviceError);
-      // Continuar para o fallback
-    }
-    
-    // Fallback: chamar a API diretamente
-    console.log('Tentando fallback: chamada direta à API');
-    const queryParams = new URLSearchParams();
-    
-    if (filtros.tipo) queryParams.append('tipo', filtros.tipo);
-    if (filtros.status) queryParams.append('status', filtros.status);
-    if (filtros.termoBusca) queryParams.append('termoBusca', filtros.termoBusca);
-    
-    queryParams.append('pagina', pagina.toString());
-    queryParams.append('limite', limite.toString());
-    
-    const response = await fetch(`/api/usuarios?${queryParams.toString()}`);
-    
-    if (!response.ok) {
-      throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    console.log('Resultado da busca de usuários via API direta:', data);
-    return data;
-  } catch (error) {
-    console.error('Erro ao buscar usuários (todos os métodos falharam):', error);
-    
-    // Último recurso: retornar uma lista vazia
-    return { usuarios: [], total: 0, pagina: 1, limite: 10, paginas: 0 };
-  }
-};
-
-// Corrigido: função de atualização de status desacoplada
-const atualizarStatusUsuario = async (id: string, novoStatus: boolean) => {
-  try {
-    const response = await fetch(`/api/usuarios/${id}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ativo: novoStatus }),
-    });
-    
-    return response.ok;
-  } catch (error) {
-    console.error('Erro ao atualizar status:', error);
-    return false;
-  }
-};
+// Importar o serviço atualizado que usa o endpoint com dados detalhados
+import { fetchDetailedUsers } from '../services/adminService';
 
 export default function Usuarios() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const toast = useToast();
   
+  // Estado para usuários com dados detalhados
   const [usuarios, setUsuarios] = useState<any[]>([]);
-  const [filtroTipo, setFiltroTipo] = useState('todos');
-  const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [filtroTipo, setFiltroTipo] = useState('');
   const [termoBusca, setTermoBusca] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [totalUsuarios, setTotalUsuarios] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(0);
   const [isMutating, setIsMutating] = useState(false);
+  
+  // Cores do tema
+  const bgColor = useColorModeValue('white', 'gray.700');
+  const hoverBgColor = useColorModeValue('gray.50', 'gray.600');
   
   // Formatação de data simplificada
   const formatarData = (dataISO: string) => {
@@ -135,28 +70,35 @@ export default function Usuarios() {
     }
   };
   
-  // Corrigido: carregamento de usuários simplificado para SSR
+  // Formatar valores monetários
+  const formatarValor = (valor: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(valor || 0);
+  };
+  
+  // Carregar usuários usando o novo serviço
   const carregarUsuarios = async () => {
     try {
       setIsLoading(true);
       
-      const resultado = await buscarUsuariosDetalhados(
-        {
-          tipo: filtroTipo !== 'todos' ? filtroTipo : undefined,
-          status: filtroStatus !== 'todos' ? filtroStatus : undefined,
-          termoBusca: termoBusca || undefined
-        },
+      // Usar o serviço de usuários detalhados para buscar os dados
+      const resultado = await fetchDetailedUsers(
+        termoBusca || undefined,
+        filtroTipo || undefined,
         paginaAtual,
         10 // Limite por página
       );
       
-      setUsuarios(resultado.usuarios || []);
-      setTotalUsuarios(resultado.total || 0);
+      setUsuarios(resultado.users || []);
+      setTotalUsuarios(resultado.totalItems || 0);
+      setTotalPaginas(resultado.totalPages || 0);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
       toast({
         title: 'Erro ao carregar usuários',
-        description: 'Não foi possível buscar os usuários. Tente novamente.',
+        description: error instanceof Error ? error.message : 'Não foi possível buscar os usuários. Tente novamente.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -167,54 +109,19 @@ export default function Usuarios() {
     }
   };
   
-  // Corrigido: useEffect com verificação de montagem para evitar memory leaks
+  // Efeito para carregar dados quando as dependências mudarem
   useEffect(() => {
-    let isMounted = true;
-    
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
       return;
     }
     
     if (isAuthenticated) {
-      const fetch = async () => {
-        try {
-          setIsLoading(true);
-          const resultado = await buscarUsuariosDetalhados(
-            {
-              tipo: filtroTipo !== 'todos' ? filtroTipo : undefined,
-              status: filtroStatus !== 'todos' ? filtroStatus : undefined,
-              termoBusca: termoBusca || undefined
-            },
-            paginaAtual,
-            10
-          );
-          
-          if (isMounted) {
-            setUsuarios(resultado.usuarios || []);
-            setTotalUsuarios(resultado.total || 0);
-          }
-        } catch (error) {
-          console.error('Erro ao carregar usuários:', error);
-          if (isMounted) {
-            setUsuarios([]);
-          }
-        } finally {
-          if (isMounted) {
-            setIsLoading(false);
-          }
-        }
-      };
-      
-      fetch();
+      carregarUsuarios();
     }
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [isAuthenticated, authLoading, router, paginaAtual]);
+  }, [isAuthenticated, authLoading, paginaAtual]);
   
-  // Filtrar usuários manualmente
+  // Filtrar usuários
   const filtrarUsuarios = () => {
     setPaginaAtual(1); // Voltar para a primeira página ao filtrar
     carregarUsuarios();
@@ -224,12 +131,19 @@ export default function Usuarios() {
   const alternarStatus = async (id: string, statusAtual: boolean) => {
     try {
       setIsMutating(true);
-      const sucesso = await atualizarStatusUsuario(id, !statusAtual);
+      const response = await fetch(`/api/usuarios/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({ ativo: !statusAtual }),
+      });
       
-      if (sucesso) {
+      if (response.ok) {
         setUsuarios(prevUsuarios =>
           prevUsuarios.map(user =>
-            user.id === id ? { ...user, ativo: !statusAtual } : user
+            user.id === id ? { ...user, active: !statusAtual } : user
           )
         );
         
@@ -257,99 +171,92 @@ export default function Usuarios() {
     }
   };
   
-  // Renderizar tipo de usuário com estilo
+  // Renderizar badge de tipo de usuário
   const renderTipoUsuario = (tipo: string) => {
-    let colorScheme = 'gray';
-    let label = 'Desconhecido';
+    let color = 'gray';
+    let label = tipo || 'Desconhecido';
     
     switch (tipo?.toLowerCase()) {
       case 'admin':
-        colorScheme = 'red';
+        color = 'red';
         label = 'Administrador';
         break;
-      case 'cliente':
-        colorScheme = 'green';
+      case 'customer':
+        color = 'green';
         label = 'Cliente';
         break;
-      case 'afiliado':
-        colorScheme = 'purple';
-        label = 'Afiliado';
-        break;
-      case 'suporte':
-        colorScheme = 'blue';
-        label = 'Suporte';
-        break;
-      default:
+      case 'provider':
+        color = 'blue';
+        label = 'Fornecedor';
         break;
     }
     
-    return <Badge colorScheme={colorScheme}>{label}</Badge>;
+    return <Badge colorScheme={color}>{label}</Badge>;
   };
   
-  // Versão minimalista do render para garantir compatibilidade
+  // Mudar de página
+  const irParaPagina = (novaPagina: number) => {
+    setPaginaAtual(Math.max(1, Math.min(novaPagina, totalPaginas)));
+  };
+
   return (
     <AdminLayout>
       <Box p={4}>
-        <Flex justifyContent="space-between" alignItems="center" mb={6}>
-          <Heading size="lg">Gerenciamento de Usuários</Heading>
+        <Flex justifyContent="space-between" alignItems="center" mb={6} flexWrap={{ base: "wrap", md: "nowrap" }}>
+          <Heading size="lg">Usuários</Heading>
           <Button
             leftIcon={<FiUserPlus />}
             colorScheme="blue"
-            onClick={() => router.push('/usuarios/novo')}
+            as={Link}
+            href="/admin/adicionar"
+            ml={{ base: 0, md: 'auto' }}
+            mt={{ base: 4, md: 0 }}
           >
-            Novo Usuário
+            Adicionar Usuário
           </Button>
         </Flex>
         
-        {/* Filtros */}
-        <Flex mb={6} gap={4} flexWrap="wrap">
-          <InputGroup maxW="300px">
-            <InputLeftElement pointerEvents="none">
-              <FiSearch color="gray.300" />
-            </InputLeftElement>
-            <Input
-              placeholder="Buscar por nome, email..."
-              value={termoBusca}
-              onChange={(e) => setTermoBusca(e.target.value)}
-            />
-          </InputGroup>
-          
-          <Select
-            maxW="200px"
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value)}
-          >
-            <option value="todos">Todos os Tipos</option>
-            <option value="admin">Administradores</option>
-            <option value="cliente">Clientes</option>
-            <option value="afiliado">Afiliados</option>
-            <option value="suporte">Suporte</option>
-          </Select>
-          
-          <Select
-            maxW="200px"
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-          >
-            <option value="todos">Todos os Status</option>
-            <option value="ativo">Ativos</option>
-            <option value="inativo">Inativos</option>
-          </Select>
-          
-          <Button
-            leftIcon={<FiFilter />}
-            onClick={filtrarUsuarios}
-            colorScheme="blue"
-            variant="outline"
-          >
-            Filtrar
-          </Button>
-        </Flex>
+        <Box bg={bgColor} p={4} borderRadius="md" shadow="sm" mb={6}>
+          <HStack spacing={4} mb={4} flexWrap={{ base: "wrap", md: "nowrap" }}>
+            <InputGroup maxW={{ base: '100%', md: '320px' }}>
+              <InputLeftElement pointerEvents="none">
+                <FiSearch color="gray.300" />
+              </InputLeftElement>
+              <Input
+                placeholder="Buscar usuário"
+                value={termoBusca}
+                onChange={(e) => setTermoBusca(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && filtrarUsuarios()}
+              />
+            </InputGroup>
+            
+            <Select 
+              placeholder="Todos os tipos" 
+              value={filtroTipo}
+              onChange={(e) => setFiltroTipo(e.target.value)}
+              maxW={{ base: '100%', md: '200px' }}
+              mt={{ base: 2, md: 0 }}
+            >
+              <option value="">Todos</option>
+              <option value="admin">Administradores</option>
+              <option value="customer">Clientes</option>
+              <option value="provider">Fornecedores</option>
+            </Select>
+            
+            <Button 
+              colorScheme="blue" 
+              onClick={filtrarUsuarios}
+              ml={{ base: 0, md: 2 }}
+              mt={{ base: 2, md: 0 }}
+            >
+              Filtrar
+            </Button>
+          </HStack>
+        </Box>
         
-        {/* Tabela de Usuários */}
         {isLoading ? (
-          <Flex justify="center" align="center" h="300px">
-            <Spinner size="xl" />
+          <Flex justify="center" align="center" py={10}>
+            <Spinner size="xl" thickness="4px" color="blue.500" />
           </Flex>
         ) : (
           <>
@@ -359,75 +266,106 @@ export default function Usuarios() {
                   <Tr>
                     <Th>Usuário</Th>
                     <Th>Tipo</Th>
+                    <Th>Cadastro</Th>
+                    <Th isNumeric>Pedidos</Th>
+                    <Th isNumeric>Total Gasto</Th>
                     <Th>Status</Th>
-                    <Th>Registrado em</Th>
                     <Th>Ações</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {usuarios.length > 0 ? (
                     usuarios.map((usuario) => (
-                      <Tr key={usuario.id}>
+                      <Tr 
+                        key={usuario.id} 
+                        _hover={{ bg: hoverBgColor }}
+                      >
                         <Td>
                           <Flex align="center">
-                            <Avatar
-                              size="sm"
-                              name={usuario.nome || usuario.email}
-                              src={usuario.avatar_url || ''}
-                              mr={2}
+                            <Avatar 
+                              size="sm" 
+                              name={usuario.name || usuario.nome} 
+                              mr={2} 
                             />
                             <Box>
-                              <Text fontWeight="bold">{usuario.nome || 'Sem Nome'}</Text>
-                              <Text fontSize="sm" color="gray.600">{usuario.email}</Text>
+                              <Text fontWeight="medium">{usuario.name || usuario.nome || 'Sem nome'}</Text>
+                              <Text fontSize="sm" color="gray.500">{usuario.email}</Text>
                             </Box>
                           </Flex>
                         </Td>
-                        <Td>{renderTipoUsuario(usuario.tipo)}</Td>
+                        <Td>{renderTipoUsuario(usuario.role || usuario.tipo)}</Td>
+                        <Td>{formatarData(usuario.created_at || usuario.data_cadastro)}</Td>
+                        <Td isNumeric>{(usuario.metrics?.orders_count || usuario.total_pedidos || 0)}</Td>
+                        <Td isNumeric>{formatarValor(usuario.metrics?.total_spent || usuario.total_gasto || 0)}</Td>
                         <Td>
                           <FormControl display="flex" alignItems="center">
-                            <Switch
-                              isChecked={usuario.ativo}
-                              onChange={() => alternarStatus(usuario.id, usuario.ativo)}
-                              isDisabled={isMutating}
-                              colorScheme="green"
+                            <Switch 
+                              colorScheme="green" 
                               size="sm"
-                              mr={2}
+                              isChecked={usuario.active || usuario.ativo}
+                              onChange={() => alternarStatus(usuario.id, usuario.active || usuario.ativo)}
+                              isDisabled={isMutating}
                             />
-                            <FormLabel htmlFor={`status-${usuario.id}`} mb={0} fontSize="sm">
-                              {usuario.ativo ? 'Ativo' : 'Inativo'}
+                            <FormLabel 
+                              mb="0" 
+                              ml={2} 
+                              fontSize="sm"
+                              color={(usuario.active || usuario.ativo) ? "green.500" : "gray.500"}
+                            >
+                              {(usuario.active || usuario.ativo) ? "Ativo" : "Inativo"}
                             </FormLabel>
                           </FormControl>
                         </Td>
-                        <Td>{formatarData(usuario.data_cadastro)}</Td>
                         <Td>
                           <Menu>
                             <MenuButton
                               as={IconButton}
+                              aria-label="Opções"
                               icon={<FiMoreVertical />}
                               variant="ghost"
                               size="sm"
                             />
                             <MenuList>
-                              <MenuItem
+                              <MenuItem 
+                                icon={<FiEye />}
+                                as={Link}
+                                href={`/usuarios/${usuario.id}`}
+                              >
+                                Ver Detalhes
+                              </MenuItem>
+                              <MenuItem 
                                 icon={<FiEdit />}
-                                onClick={() => router.push(`/usuarios/${usuario.id}`)}
+                                as={Link}
+                                href={`/usuarios/editar/${usuario.id}`}
                               >
                                 Editar
                               </MenuItem>
-                              <MenuItem
+                              <MenuItem 
                                 icon={<FiMail />}
-                                onClick={() => window.location.href = `mailto:${usuario.email}`}
+                                onClick={() => {
+                                  // Função para enviar mensagem
+                                  toast({
+                                    title: 'Funcionalidade em desenvolvimento',
+                                    description: 'O envio de mensagens estará disponível em breve.',
+                                    status: 'info',
+                                    duration: 3000,
+                                  });
+                                }}
                               >
-                                Enviar Email
+                                Enviar Mensagem
                               </MenuItem>
                               <MenuDivider />
-                              <MenuItem
+                              <MenuItem 
                                 icon={<FiTrash2 />}
                                 color="red.500"
                                 onClick={() => {
-                                  if (confirm(`Deseja realmente excluir o usuário ${usuario.nome || usuario.email}?`)) {
-                                    // Implementar exclusão
-                                  }
+                                  // Função para excluir
+                                  toast({
+                                    title: 'Funcionalidade em desenvolvimento',
+                                    description: 'A exclusão de usuários estará disponível em breve.',
+                                    status: 'info',
+                                    duration: 3000,
+                                  });
                                 }}
                               >
                                 Excluir
@@ -439,8 +377,8 @@ export default function Usuarios() {
                     ))
                   ) : (
                     <Tr>
-                      <Td colSpan={5} textAlign="center" py={6}>
-                        <Text>Nenhum usuário encontrado</Text>
+                      <Td colSpan={7} textAlign="center" py={6}>
+                        <Text color="gray.500">Nenhum usuário encontrado</Text>
                       </Td>
                     </Tr>
                   )}
@@ -448,26 +386,26 @@ export default function Usuarios() {
               </Table>
             </Box>
             
-            {/* Paginação */}
-            <Flex justify="space-between" align="center" mt={4}>
-              <Text>
-                Total: {totalUsuarios} usuários
+            <Flex justify="space-between" mt={6} align="center">
+              <Text color="gray.600">
+                Mostrando {usuarios.length} de {totalUsuarios} usuários
               </Text>
+              
               <HStack>
                 <Button
                   size="sm"
-                  onClick={() => setPaginaAtual(p => Math.max(p - 1, 1))}
+                  onClick={() => irParaPagina(paginaAtual - 1)}
                   isDisabled={paginaAtual === 1}
                 >
                   Anterior
                 </Button>
-                <Text>
-                  Página {paginaAtual} de {Math.max(Math.ceil(totalUsuarios / 10), 1)}
-                </Text>
+                
+                <Text>Página {paginaAtual} de {totalPaginas}</Text>
+                
                 <Button
                   size="sm"
-                  onClick={() => setPaginaAtual(p => p + 1)}
-                  isDisabled={paginaAtual >= Math.ceil(totalUsuarios / 10)}
+                  onClick={() => irParaPagina(paginaAtual + 1)}
+                  isDisabled={paginaAtual >= totalPaginas}
                 >
                   Próxima
                 </Button>

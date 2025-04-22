@@ -12,6 +12,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Obter o token de autorização do cabeçalho
+    const authHeader = req.headers.authorization;
+    
+    // Verificar se existe token de autorização
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ 
+        error: 'Não autorizado',
+        message: 'Token de autorização não fornecido ou em formato inválido (deve ser Bearer Token)'
+      });
+    }
+    
+    // Extrair o token
+    const token = authHeader.substring(7);
+    
+    // Log para debugging
+    console.log('Token recebido:', token.substring(0, 10) + '...');
+    
     // Extrair parâmetros de query
     const { search, role, page, limit } = req.query;
     
@@ -37,36 +54,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Log para debug
     console.log('Buscando usuários detalhados com parâmetros:', Object.fromEntries(params));
     
+    // Configurar headers com o token
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'ApiKey': process.env.ORDERS_API_KEY || process.env.API_KEY || '' // Adicionar API Key para maior segurança
+    };
+    
     // Tentar buscar dados da API de orders
     try {
-      const response = await ordersApi.get(`/api/api/admin/panel-users?${params.toString()}`);
+      const response = await ordersApi.get(`/api/api/admin/panel-users?${params.toString()}`, {
+        headers: headers
+      });
       return res.status(200).json(response.data);
     } catch (ordersError: any) {
       console.error('Erro ao buscar da API de orders:', ordersError.message);
       
-      // Se não conseguir, verificar se temos o token de autorização
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader) {
-        return res.status(401).json({ 
-          error: 'Não autorizado',
-          message: 'Token de autorização não fornecido'
-        });
-      }
-      
       // Tentar buscar diretamente da API usando o token fornecido
+      console.log('Tentando acesso direto à API de orders');
       const directResponse = await fetch(
         `${process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com'}/api/api/admin/panel-users?${params.toString()}`,
         {
           method: 'GET',
-          headers: {
-            'Authorization': authHeader,
-            'Content-Type': 'application/json',
-          },
+          headers: headers
         }
       );
       
       if (!directResponse.ok) {
+        // Se o erro for de autenticação, retornar detalhes específicos
+        if (directResponse.status === 401) {
+          console.error('Erro de autenticação na API direta:', directResponse.status, directResponse.statusText);
+          return res.status(401).json({
+            error: 'Não autorizado',
+            message: 'Token inválido ou sem permissão para acessar este recurso',
+            statusCode: directResponse.status
+          });
+        }
+        
+        // Para outros erros
         throw new Error(`Erro na API direta: ${directResponse.status} ${directResponse.statusText}`);
       }
       

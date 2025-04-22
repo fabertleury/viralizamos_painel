@@ -37,7 +37,7 @@ import {
 import { HiOutlineCurrencyDollar, HiOutlineShoppingCart, HiOutlineCalendar, HiOutlineClock, HiOutlineScale } from 'react-icons/hi';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/format';
 import NextLink from 'next/link';
-import { DetailedUser, UserMetrics } from '@/services/adminService';
+import { DetailedUser, UserMetrics, fetchUserDetails } from '@/services/adminService';
 import { FiAlertCircle } from 'react-icons/fi';
 
 interface MetricasUsuarioDetalhadasProps {
@@ -54,22 +54,14 @@ const MetricasUsuarioDetalhadas: React.FC<MetricasUsuarioDetalhadasProps> = ({ u
   const hoverBgColor = useColorModeValue('gray.50', 'gray.700');
 
   useEffect(() => {
-    const fetchUserDetails = async () => {
+    const fetchUserData = async () => {
       try {
         setLoading(true);
-        // Buscar detalhes do novo endpoint
-        const response = await fetch(`/api/usuarios/${userId}/detalhes`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-          }
-        });
         
-        if (!response.ok) {
-          throw new Error('Falha ao carregar detalhes do usuário');
-        }
-        
-        const data = await response.json();
-        setDetalhes(data);
+        // Usar a função de serviço para buscar detalhes do usuário
+        const userData = await fetchUserDetails(userId);
+        console.log('Detalhes do usuário carregados com sucesso:', userId);
+        setDetalhes(userData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erro desconhecido');
         console.error('Erro ao carregar detalhes:', err);
@@ -79,7 +71,7 @@ const MetricasUsuarioDetalhadas: React.FC<MetricasUsuarioDetalhadasProps> = ({ u
     };
 
     if (userId) {
-      fetchUserDetails();
+      fetchUserData();
     }
   }, [userId]);
 
