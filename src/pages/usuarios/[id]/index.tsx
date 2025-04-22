@@ -68,6 +68,17 @@ import axios from 'axios';
 type Usuario = any;
 type MetricasUsuario = any;
 
+// Interface simplificada para pedido
+interface Pedido {
+  id: string;
+  data_criacao: string;
+  status: string;
+  valor: number;
+  produto_nome: string;
+  quantidade: number;
+  provedor_nome?: string;
+}
+
 export default function DetalhesUsuario() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -82,6 +93,8 @@ export default function DetalhesUsuario() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [historicoCompras, setHistoricoCompras] = useState<any[]>([]);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [loadingPedidos, setLoadingPedidos] = useState(false);
   
   // Estado para edição de usuário
   const [usuarioEdit, setUsuarioEdit] = useState<Partial<Usuario>>({});
@@ -98,52 +111,65 @@ export default function DetalhesUsuario() {
   // Carregar dados do usuário
   useEffect(() => {
     if (isAuthenticated && id) {
-      carregarDadosUsuario();
+      buscarDetalhesUsuario(id);
     }
   }, [isAuthenticated, id]);
   
-  // Função para carregar dados do usuário
-  const carregarDadosUsuario = async () => {
+  // Função para buscar detalhes do usuário
+  const buscarDetalhesUsuario = async (userId: string) => {
     try {
       setIsLoading(true);
+      const response = await fetch(`/api/usuarios/${userId}`);
       
-      // Buscar dados do usuário
-      const userResponse = await axios.get(`/api/usuarios/${id}`);
-      setUsuario(userResponse.data);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao buscar detalhes do usuário');
+      }
       
-      // Buscar métricas do usuário
-      const metricasResponse = await axios.get(`/api/usuarios/${id}/metricas`);
-      setMetricas(metricasResponse.data);
+      const data = await response.json();
+      setUsuario(data);
       
-      // Buscar permissões do usuário
-      const permissoesResponse = await axios.get(`/api/usuarios/${id}/permissoes`);
-      setPermissoes(permissoesResponse.data);
-      
-      // Buscar histórico de compras
-      const historicoResponse = await axios.get(`/api/usuarios/${id}/compras`);
-      setHistoricoCompras(historicoResponse.data);
-      
-      // Inicializar estado para edição
-      setUsuarioEdit({
-        nome: userResponse.data.nome,
-        email: userResponse.data.email,
-        telefone: userResponse.data.telefone,
-        tipo: userResponse.data.tipo
-      });
+      // Buscar pedidos do usuário depois de obter seus detalhes
+      buscarPedidosUsuario(userId);
     } catch (error) {
-      console.error('Erro ao carregar dados do usuário:', error);
+      console.error('Erro ao buscar detalhes do usuário:', error);
       toast({
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível obter os dados do usuário. Tente novamente mais tarde.',
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Não foi possível carregar os detalhes do usuário',
         status: 'error',
         duration: 5000,
         isClosable: true,
       });
-      
-      // Simulação de dados para desenvolvimento
-      simularDados();
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Função para buscar pedidos do usuário
+  const buscarPedidosUsuario = async (userId: string) => {
+    try {
+      setLoadingPedidos(true);
+      const response = await fetch(`/api/usuarios/${userId}/pedidos`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao buscar pedidos do usuário');
+      }
+      
+      const data = await response.json();
+      setPedidos(data.pedidos || []);
+    } catch (error) {
+      console.error('Erro ao buscar pedidos do usuário:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar os pedidos do usuário',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+      setPedidos([]);
+    } finally {
+      setLoadingPedidos(false);
     }
   };
   

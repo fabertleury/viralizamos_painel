@@ -1,5 +1,22 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
+import { Pool } from 'pg';
+
+// Conexão com o banco de dados de orders
+let ordersPool;
+try {
+  console.log('Inicializando pool de conexão para Orders DB...');
+  
+  if (typeof window === 'undefined' && process.env.NEXT_PHASE !== 'phase-production-build') {
+    ordersPool = new Pool({
+      connectionString: process.env.ORDERS_DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+  }
+} catch (error) {
+  console.error('Erro ao inicializar pool de conexão orders:', error);
+  ordersPool = null;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -21,142 +38,120 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log(`API /usuarios - Parâmetros: tipo=${tipo}, status=${status}, termoBusca=${termoBusca}, pagina=${pagina}, limite=${limite}`);
 
-    // Configuração dos endpoints dos microserviços
-    const pagamentosApiUrl = process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api';
-    const ordersApiUrl = process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com/api';
-    
-    // Chaves de API para autenticação
-    const pagamentosApiKey = process.env.PAYMENTS_API_KEY || '';
-    const ordersApiKey = process.env.ORDERS_API_KEY || '';
+    // Consultar usuários diretamente do banco de dados orders
+    if (!ordersPool) {
+      throw new Error('Pool de conexão orders não inicializado');
+    }
 
-    console.log(`API /usuarios - Usando endpoints: Pagamentos=${pagamentosApiUrl}, Orders=${ordersApiUrl}`);
-    console.log(`API /usuarios - Chaves de API disponíveis: Pagamentos=${pagamentosApiKey ? 'Sim' : 'Não'}, Orders=${ordersApiKey ? 'Sim' : 'Não'}`);
+    // Começar a buscar os usuários do banco de dados orders
+    console.log('API /usuarios - Buscando usuários do banco orders...');
 
-    // Buscar os usuários diretamente do microserviço de pagamentos
-    const queryParams = new URLSearchParams();
-    
-    // Adicionar filtros aos parâmetros de consulta
-    if (tipo && tipo !== 'todos') {
-      queryParams.append('role', tipo as string);
-    }
-    
-    if (status && status !== 'todos') {
-      queryParams.append('active', status === 'ativo' ? 'true' : 'false');
-    }
-    
-    if (termoBusca) {
-      queryParams.append('search', termoBusca as string);
-    }
-    
-    // Adicionar parâmetros de paginação
-    queryParams.append('page', pagina as string);
-    queryParams.append('limit', limite as string);
-    
-    console.log(`API /usuarios - Preparando requisição para ${pagamentosApiUrl}/admin/users/list`);
-    
-    // Usar a variável de ambiente exatamente como está definida no .env
-    const apiKey = process.env.PAYMENTS_API_KEY;
-    console.log(`API /usuarios - Usando API Key: ${apiKey ? apiKey.substring(0, 5) + '...' : 'indefinida'}`);
-    
-    // Fazer requisição para o microserviço de pagamentos
-    const usuariosResponse = await axios.get(`${pagamentosApiUrl}/admin/users/list?${queryParams.toString()}`, {
-      headers: {
-        'Authorization': `ApiKey ${apiKey}`
-      },
-      timeout: 8000 // 8 segundos de timeout para não bloquear a UI
-    });
-    
-    console.log(`API /usuarios - Resposta do microserviço de pagamentos: status=${usuariosResponse.status}`);
-    
-    // Dados base dos usuários
-    const usuariosData = usuariosResponse.data || {};
-    const usuarios = usuariosData.users || [];
-    const total = usuariosData.total || 0;
-    
-    // Mapear os dados para o formato esperado pelo frontend
-    let usuariosMapeados = usuarios.map((user: any) => ({
-      id: user.id,
-      nome: user.name || 'Sem nome',
-      email: user.email,
-      telefone: user.phone || 'Não informado',
-      tipo: user.role || 'cliente',
-      ativo: user.active !== undefined ? user.active : true,
-      data_criacao: user.created_at,
-      ultimo_acesso: user.last_login || null,
-      total_gasto: 0, // Será preenchido com dados do microserviço de orders
-      total_pedidos: 0, // Será preenchido com dados do microserviço de orders
-      ultimo_pedido: null, // Será preenchido com dados do microserviço de orders
-      servicos_usados: [] // Será preenchido com dados do microserviço de orders
-    }));
-    
-    // Se houver usuários, buscar informações complementares de pedidos
-    if (usuariosMapeados.length > 0) {
+    // Query para buscar usuários únicos do banco de pedidos
+    const queryUsuarios = `
+      SELECT DISTINCT ON (o.user_id)
+        o.user_id as id,
+        o.customer_name as nome,
+        o.customer_email as email,
+        o.customer_phone as telefone,
+        'cliente' as tipo,
+        true as ativo,
+        MIN(o.created_at) as data_criacao
+      FROM "Order" o
+      WHERE o.user_id IS NOT NULL AND o.customer_email IS NOT NULL
+      GROUP BY o.user_id, o.customer_name, o.customer_email, o.customer_phone
+      ORDER BY o.user_id
+      LIMIT $1 OFFSET $2
+    `;
+
+    // Query para contar total de usuários únicos
+    const queryContagem = `
+      SELECT COUNT(DISTINCT user_id) as total
+      FROM "Order"
+      WHERE user_id IS NOT NULL AND customer_email IS NOT NULL
+    `;
+
+    // Calcular offset para paginação
+    const offset = (parseInt(pagina as string) - 1) * parseInt(limite as string);
+
+    // Buscar usuários e contagem total em paralelo
+    const [resultUsuarios, resultContagem] = await Promise.all([
+      ordersPool.query(queryUsuarios, [limite, offset]),
+      ordersPool.query(queryContagem)
+    ]);
+
+    const usuarios = resultUsuarios.rows;
+    const total = parseInt(resultContagem.rows[0].total);
+
+    console.log(`API /usuarios - Encontrados ${usuarios.length} usuários de um total de ${total}`);
+
+    // Para cada usuário, buscar estatísticas de pedidos
+    const usuariosComEstatisticas = await Promise.all(usuarios.map(async (usuario) => {
       try {
-        // Obter os emails de todos os usuários
-        const emails = usuariosMapeados.map(user => user.email);
-        
-        console.log(`API /usuarios - Buscando informações de pedidos para ${emails.length} usuários`);
-        
-        // Usar a variável de ambiente exatamente como está definida no .env
-        const ordersKey = process.env.ORDERS_API_KEY;
-        
-        // Buscar estatísticas de pedidos de todos os usuários
-        const pedidosResponse = await axios.post(`${ordersApiUrl}/stats/users/orders`, {
-          emails: emails
-        }, {
-          headers: {
-            'Authorization': `Bearer ${ordersKey}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 8000 // 8 segundos de timeout
-        });
-        
-        console.log(`API /usuarios - Resposta do microserviço de orders: status=${pedidosResponse.status}`);
-        
-        // Dados de pedidos por email
-        const pedidosPorEmail = pedidosResponse.data || {};
-        
-        // Complementar os dados de usuários com as informações de pedidos
-        usuariosMapeados = usuariosMapeados.map(usuario => {
-          const dadosPedidos = pedidosPorEmail[usuario.email] || {};
-          
-          return {
-            ...usuario,
-            total_gasto: dadosPedidos.total_gasto || 0,
-            total_pedidos: dadosPedidos.total_pedidos || 0,
-            ultimo_pedido: dadosPedidos.ultimo_pedido || null,
-            servicos_usados: dadosPedidos.servicos || []
-          };
-        });
-      } catch (ordersError) {
-        console.error('API /usuarios - Erro ao buscar dados de pedidos:', ordersError);
-        // Continuar mesmo se não conseguir buscar dados de pedidos
+        // Buscar total de pedidos e valor total
+        const queryEstatisticas = `
+          SELECT 
+            COUNT(*) as total_pedidos,
+            SUM(amount) as total_gasto,
+            MAX(created_at) as ultimo_pedido
+          FROM "Order"
+          WHERE user_id = $1
+        `;
+
+        // Buscar serviços mais usados
+        const queryServicos = `
+          SELECT service_name, COUNT(*) as quantidade
+          FROM "Order"
+          WHERE user_id = $1 AND service_name IS NOT NULL
+          GROUP BY service_name
+          ORDER BY quantidade DESC
+          LIMIT 3
+        `;
+
+        const [resultEstatisticas, resultServicos] = await Promise.all([
+          ordersPool.query(queryEstatisticas, [usuario.id]),
+          ordersPool.query(queryServicos, [usuario.id])
+        ]);
+
+        const estatisticas = resultEstatisticas.rows[0];
+        const servicos = resultServicos.rows.map(row => row.service_name);
+
+        return {
+          ...usuario,
+          total_pedidos: parseInt(estatisticas.total_pedidos || '0'),
+          total_gasto: parseFloat(estatisticas.total_gasto || '0'),
+          ultimo_pedido: estatisticas.ultimo_pedido,
+          servicos_usados: servicos
+        };
+      } catch (error) {
+        console.error(`Erro ao buscar estatísticas para usuário ${usuario.id}:`, error);
+        return {
+          ...usuario,
+          total_pedidos: 0,
+          total_gasto: 0,
+          ultimo_pedido: null,
+          servicos_usados: []
+        };
       }
-    }
-    
-    console.log(`API /usuarios - Retornando ${usuariosMapeados.length} usuários`);
+    }));
+
+    console.log(`API /usuarios - Retornando ${usuariosComEstatisticas.length} usuários com estatísticas`);
     
     // Retornar os dados completos
     return res.status(200).json({
-      usuarios: usuariosMapeados,
+      usuarios: usuariosComEstatisticas,
       total: total,
       pagina: parseInt(pagina as string),
       limite: parseInt(limite as string),
       paginas: Math.ceil(total / parseInt(limite as string))
     });
   } catch (error) {
-    console.error('API /usuarios - Erro ao buscar dados dos microserviços:', error);
+    console.error('API /usuarios - Erro ao buscar dados:', error);
     
-    // Detalhes do erro para logging
     if (error instanceof Error) {
       console.error(`API /usuarios - Mensagem: ${error.message}`);
-      if (axios.isAxiosError(error)) {
-        console.error(`API /usuarios - Status: ${error.response?.status}`);
-        console.error(`API /usuarios - Dados: ${JSON.stringify(error.response?.data)}`);
-      }
     }
     
-    // Dados mockados para desenvolvimento/teste
+    // Dados mockados para desenvolvimento/teste em caso de erro
     console.log('API /usuarios - Retornando dados mockados como fallback');
     
     const mockUsuarios = [
@@ -204,7 +199,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     ];
     
-    // Retornar erro 500 com dados mockados para desenvolvimento
     return res.status(200).json({ 
       usuarios: mockUsuarios,
       total: mockUsuarios.length,
