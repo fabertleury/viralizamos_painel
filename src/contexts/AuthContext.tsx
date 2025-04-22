@@ -1,7 +1,9 @@
+'use client';
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useToast } from '@chakra-ui/react';
 import Cookies from 'js-cookie';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 
 // Interface for User data
 interface User {
@@ -35,8 +37,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
   const toast = useToast();
 
+  // Verificar se está rodando no cliente
+  const isBrowser = typeof window !== 'undefined';
+
   // Effect to check if user is already authenticated
   useEffect(() => {
+    // Não executar no servidor
+    if (!isBrowser) {
+      setLoading(false);
+      return;
+    }
+
     // Load user data from cookies
     const token = Cookies.get('auth_token');
     const userData = Cookies.get('auth_user');
@@ -53,7 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     
     setLoading(false);
-  }, []);
+  }, [isBrowser]);
 
   // Login function
   async function login(email: string, password: string) {
@@ -90,8 +101,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isClosable: true,
       });
       
-      // Redirect to dashboard
-      router.replace('/dashboard');
+      // Redirect to dashboard apenas se estiver no navegador
+      if (isBrowser) {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       toast({
         title: 'Erro de autenticação',
@@ -107,6 +120,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Logout function
   function logout() {
+    // Não executar no servidor
+    if (!isBrowser) {
+      return;
+    }
+
     // Clear cookies
     Cookies.remove('auth_token');
     Cookies.remove('auth_user');
@@ -122,8 +140,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isClosable: true,
     });
     
-    // Redirect to login page
-    router.replace('/login');
+    // Redirect to login page apenas se estiver no navegador
+    if (isBrowser) {
+      router.push('/login');
+    }
   }
 
   return (

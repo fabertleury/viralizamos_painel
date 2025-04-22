@@ -1,0 +1,194 @@
+{
+  "name": "Order Notification Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "notify",
+        "options": {
+          "ignoreSslIssues": false
+        },
+        "channel": "postgres-changes",
+        "connectionString": "=DB_POSTGRES_CONNECTION_STRING",
+        "tableName": "Order",
+        "triggerType": "INSERT,UPDATE",
+        "schema": "public"
+      },
+      "id": "9f77df74-1f33-4dae-8fee-b57bb7d52b25",
+      "name": "PostgreSQL Trigger",
+      "type": "n8n-nodes-base.postgresTrigger",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Este código formata os dados da compra para exibição\nconst data = $input.item.json;\n\n// Extrai informações relevantes do objeto de compra\nconst order = {\n  id: data.id,\n  createdAt: data.createdAt,\n  status: data.status,\n  transaction_id: data.transaction_id,\n  provider: data.provider_id,\n  amount: data.amount,\n  target_username: data.target_username,\n  quantity: data.quantity,\n  service_name: data.service_name,\n  user_email: data.user_email\n};\n\nreturn {json: order};"
+      },
+      "id": "4b0c3a67-5c79-48b4-9e8e-f5d4ec5f0c2b",
+      "name": "Format Order Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "path": "order-notification",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "77f61c82-bdcf-4ae5-8d68-faa22a9f0d5a",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        800,
+        100
+      ],
+      "webhookId": "order-notification-endpoint"
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseData": "responseBody",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "responseBody": "=<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Notificações de Compras - Viralizamos</title>\n    <style>\n        body {\n            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n            max-width: 1200px;\n            margin: 0 auto;\n            padding: 20px;\n            background-color: #f5f7fb;\n            color: #333;\n        }\n        h1 {\n            color: #2563eb;\n            text-align: center;\n            margin-bottom: 40px;\n        }\n        .orders {\n            display: grid;\n            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));\n            gap: 20px;\n        }\n        .order-card {\n            background-color: white;\n            border-radius: 8px;\n            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n            padding: 20px;\n            transition: transform 0.3s ease;\n        }\n        .order-card:hover {\n            transform: translateY(-5px);\n            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);\n        }\n        .order-header {\n            border-bottom: 1px solid #e5e7eb;\n            padding-bottom: 15px;\n            margin-bottom: 15px;\n            display: flex;\n            justify-content: space-between;\n            align-items: center;\n        }\n        .order-id {\n            font-size: 1.1rem;\n            font-weight: bold;\n            color: #2563eb;\n        }\n        .order-status {\n            padding: 6px 12px;\n            border-radius: 20px;\n            font-size: 0.85rem;\n            font-weight: bold;\n            text-transform: uppercase;\n        }\n        .status-pending {\n            background-color: #fef3c7;\n            color: #d97706;\n        }\n        .status-completed {\n            background-color: #d1fae5;\n            color: #059669;\n        }\n        .status-failed {\n            background-color: #fee2e2;\n            color: #dc2626;\n        }\n        .status-processing {\n            background-color: #dbeafe;\n            color: #2563eb;\n        }\n        .order-field {\n            margin-bottom: 8px;\n            display: flex;\n        }\n        .field-label {\n            font-weight: 500;\n            width: 180px;\n            color: #6b7280;\n        }\n        .field-value {\n            font-weight: 400;\n            flex: 1;\n        }\n        .order-amount {\n            font-size: 1.25rem;\n            font-weight: bold;\n            color: #059669;\n            text-align: right;\n            margin-top: 20px;\n        }\n        .refresh-button {\n            display: block;\n            width: 200px;\n            margin: 40px auto;\n            padding: 12px 24px;\n            background-color: #2563eb;\n            color: white;\n            border: none;\n            border-radius: 6px;\n            font-size: 1rem;\n            font-weight: 500;\n            cursor: pointer;\n            text-align: center;\n            text-decoration: none;\n            transition: background-color 0.3s;\n        }\n        .refresh-button:hover {\n            background-color: #1d4ed8;\n        }\n        .timestamp {\n            text-align: center;\n            color: #6b7280;\n            font-size: 0.9rem;\n            margin-bottom: 30px;\n        }\n        @media (max-width: 768px) {\n            .orders {\n                grid-template-columns: 1fr;\n            }\n        }\n    </style>\n</head>\n<body>\n    <h1>Dashboard de Notificações de Compras</h1>\n    \n    <p class=\"timestamp\">Última atualização: {{new Date().toLocaleString('pt-BR', {dateStyle: 'full', timeStyle: 'medium'})}}</p>\n    \n    <div class=\"orders\">\n        {{#each $execution.all($inputItems[0].json)}}\n        <div class=\"order-card\">\n            <div class=\"order-header\">\n                <div class=\"order-id\">Pedido #{{id}}</div>\n                <div class=\"order-status status-{{status.toLowerCase()}}\">{{status}}</div>\n            </div>\n            \n            <div class=\"order-field\">\n                <div class=\"field-label\">Data:</div>\n                <div class=\"field-value\">{{moment(createdAt).format('DD/MM/YYYY HH:mm:ss')}}</div>\n            </div>\n            \n            <div class=\"order-field\">\n                <div class=\"field-label\">ID da Transação:</div>\n                <div class=\"field-value\">{{transaction_id}}</div>\n            </div>\n            \n            <div class=\"order-field\">\n                <div class=\"field-label\">Provedor:</div>\n                <div class=\"field-value\">{{provider}}</div>\n            </div>\n            \n            <div class=\"order-field\">\n                <div class=\"field-label\">Email do Cliente:</div>\n                <div class=\"field-value\">{{user_email}}</div>\n            </div>\n            \n            <div class=\"order-field\">\n                <div class=\"field-label\">Serviço:</div>\n                <div class=\"field-value\">{{service_name}}</div>\n            </div>\n            \n            <div class=\"order-field\">\n                <div class=\"field-label\">Usuário Alvo:</div>\n                <div class=\"field-value\">{{target_username}}</div>\n            </div>\n            \n            <div class=\"order-field\">\n                <div class=\"field-label\">Quantidade:</div>\n                <div class=\"field-value\">{{quantity}}</div>\n            </div>\n            \n            <div class=\"order-amount\">\n                R$ {{(parseFloat(amount) / 100).toFixed(2)}}\n            </div>\n        </div>\n        {{/each}}\n    </div>\n    \n    <a href=\"javascript:location.reload()\" class=\"refresh-button\">Atualizar dados</a>\n</body>\n</html>"
+      },
+      "id": "e14c7b58-6eaf-43fc-a6c1-f1e12e1a9e01",
+      "name": "Responder com HTML",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:5678/webhook/order-notification-endpoint",
+        "authentication": "basicAuth",
+        "options": {}
+      },
+      "id": "5e0a6d01-beac-4b4e-9c10-a7d29fa0f052",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        800,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "Webhook Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "Order",
+        "options": {
+          "sort": {
+            "values": [
+              {
+                "field": "createdAt",
+                "direction": "desc"
+              }
+            ]
+          }
+        }
+      },
+      "id": "1b7d92e5-f0fa-429a-a31d-9e30a1dbf8b9",
+      "name": "PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        600,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "PostgreSQL Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Order Data": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Responder com HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "viralizamos",
+      "id": "1"
+    },
+    {
+      "name": "order-notifications",
+      "id": "2"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2023-09-15T12:00:00.000Z",
+  "versionId": "3a91c1e6-32e7-4fb5-a16c-b5b3e1d1a2a3"
+} 
