@@ -71,6 +71,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setLoading(true);
       
+      // Verificar se o email é válido
+      const publicAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@viralizamos.com';
+      if (email !== publicAdminEmail) {
+        throw new Error('Apenas administradores podem acessar este painel');
+      }
+      
       // Call login API
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -78,17 +84,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
+        credentials: 'include',
       });
+      
+      // Se a resposta não for bem-sucedida, tratar o erro
+      if (!response.ok) {
+        const errorData = await response.json();
+        const errorMessage = errorData.message || 'Falha na autenticação';
+        
+        if (response.status === 401) {
+          console.error('Credenciais inválidas:', errorData);
+          throw new Error('Credenciais inválidas. Verifique o email e senha.');
+        } else {
+          console.error('Erro de autenticação:', response.status, errorData);
+          throw new Error(errorMessage);
+        }
+      }
       
       const data = await response.json();
       
-      if (!response.ok) {
-        throw new Error(data.message || 'Falha na autenticação');
+      // Verificar se o token foi retornado
+      if (!data.token) {
+        console.error('Token não retornado pela API', data);
+        throw new Error('Erro no sistema de autenticação');
       }
       
       // Save data in cookies
-      Cookies.set('auth_token', data.token, { expires: 7 });
-      Cookies.set('auth_user', JSON.stringify(data.user), { expires: 7 });
+      Cookies.set('auth_token', data.token, { expires: 7, path: '/' });
+      Cookies.set('auth_user', JSON.stringify(data.user), { expires: 7, path: '/' });
       
       // Update state
       setUser(data.user);
@@ -113,6 +136,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         duration: 3000,
         isClosable: true,
       });
+      
+      // Limpar cookies e estado de autenticação em caso de erro
+      Cookies.remove('auth_token');
+      Cookies.remove('auth_user');
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -126,8 +154,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     // Clear cookies
-    Cookies.remove('auth_token');
-    Cookies.remove('auth_user');
+    Cookies.remove('auth_token', { path: '/' });
+    Cookies.remove('auth_user', { path: '/' });
     
     // Clear state
     setUser(null);

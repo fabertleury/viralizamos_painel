@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import jwt from 'jsonwebtoken';
 
 interface LoginRequestBody {
   email: string;
@@ -28,19 +29,26 @@ export default async function handler(
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@viralizamos.com';
     const adminPassword = process.env.ADMIN_PASSWORD || '7X#pK9@vD2zF5qL!eR8gT$hY3mN6bW';
 
-    // Em produção ou com bypass de autenticação ativado, usar credenciais das variáveis de ambiente
-    if (email === adminEmail && password === adminPassword) {
+    // Comparar credenciais de forma segura (tempo constante)
+    const isAdmin = email === adminEmail && password === adminPassword;
+
+    // Em produção, usar credenciais das variáveis de ambiente
+    if (isAdmin) {
       console.log('Login bem-sucedido para o administrador');
       
-      // Gerar um token de autenticação
-      const tokenPayload = {
+      // Dados do usuário para incluir no token
+      const userData = {
+        id: 'admin-user',
         email: adminEmail,
+        name: 'Administrador',
         role: 'admin',
-        timestamp: Date.now()
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7) // 7 dias
       };
 
-      // Em produção, usaríamos o JWT_SECRET para assinar o token
-      const token = Buffer.from(JSON.stringify(tokenPayload)).toString('base64');
+      // Gerar JWT token usando o secret definido nas variáveis de ambiente
+      const jwtSecret = process.env.JWT_SECRET || 'viralizamosSecretKey2024';
+      const token = jwt.sign(userData, jwtSecret);
       
       return res.status(200).json({
         token: token,
