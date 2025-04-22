@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
+  output: 'standalone',
   
   // Configure for both App Router and Pages Router
   experimental: {
@@ -90,7 +91,7 @@ const nextConfig = {
     maxInactiveAge: 120 * 1000,
     // Número de páginas que serão mantidas no buffer
     pagesBufferLength: 5,
-  }
+  },
 };
 
 module.exports = nextConfig; 

@@ -12,13 +12,16 @@ import {
   useColorModeValue,
   Flex,
   Image,
+  Text,
+  Link,
 } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import Cookies from 'js-cookie';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  // Pré-definir o email do administrador para facilitar o login
+  const [email, setEmail] = useState('admin@viralizamos.com');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -59,7 +62,7 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -89,6 +92,9 @@ export default function Login() {
           <Heading size="lg" fontWeight="600">
             Login - Painel Administrativo
           </Heading>
+          <Text fontSize="sm" color="gray.500">
+            Acesso exclusivo para administradores
+          </Text>
         </Stack>
         <Box
           py={{ base: '0', sm: '8' }}
@@ -107,6 +113,7 @@ export default function Login() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    placeholder="admin@viralizamos.com"
                   />
                   <FormErrorMessage>{emailError}</FormErrorMessage>
                 </FormControl>
@@ -117,16 +124,18 @@ export default function Login() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Digite sua senha de administrador"
                   />
                   <FormErrorMessage>{passwordError}</FormErrorMessage>
                 </FormControl>
               </Stack>
               <Button
-                type="submit"
                 colorScheme="blue"
                 size="lg"
                 fontSize="md"
+                type="submit"
                 isLoading={isSubmitting}
+                loadingText="Entrando..."
               >
                 Entrar
               </Button>
