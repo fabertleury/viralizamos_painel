@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import axios from 'axios';
 import { Pool } from 'pg';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 // Conexão com o banco de dados de orders
 let ordersPool;
@@ -9,7 +11,7 @@ try {
   
   if (typeof window === 'undefined' && process.env.NEXT_PHASE !== 'phase-production-build') {
     ordersPool = new Pool({
-      connectionString: process.env.ORDERS_DATABASE_URL,
+      connectionString: process.env.DATABASE_URL_ORDERS || process.env.ORDERS_DATABASE_URL,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
     });
   }
@@ -38,45 +40,76 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log(`API /usuarios - Parâmetros: tipo=${tipo}, status=${status}, termoBusca=${termoBusca}, pagina=${pagina}, limite=${limite}`);
 
-    // Consultar usuários diretamente do banco de dados orders
+    // Verificar e recriar o pool de conexão se necessário
     if (!ordersPool) {
-      throw new Error('Pool de conexão orders não inicializado');
+      console.log('API /usuarios - Tentando reinicializar o pool de conexão...');
+      try {
+        ordersPool = new Pool({
+          connectionString: process.env.DATABASE_URL_ORDERS || process.env.ORDERS_DATABASE_URL,
+          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+        });
+      } catch (poolError) {
+        throw new Error(`Falha ao reinicializar o pool de conexão: ${poolError.message}`);
+      }
     }
 
-    // Começar a buscar os usuários do banco de dados orders
-    console.log('API /usuarios - Buscando usuários do banco orders...');
-
-    // Query para buscar usuários únicos do banco de pedidos
-    const queryUsuarios = `
-      SELECT DISTINCT ON (o.user_id)
-        o.user_id as id,
-        o.customer_name as nome,
-        o.customer_email as email,
-        o.customer_phone as telefone,
+    // Construir query básica
+    let queryUsuariosBase = `
+      SELECT DISTINCT ON (customer_email)
+        id,
+        customer_email as email,
+        customer_name as nome,
+        customer_phone as telefone,
         'cliente' as tipo,
         true as ativo,
-        MIN(o.created_at) as data_criacao
-      FROM "Order" o
-      WHERE o.user_id IS NOT NULL AND o.customer_email IS NOT NULL
-      GROUP BY o.user_id, o.customer_name, o.customer_email, o.customer_phone
-      ORDER BY o.user_id
-      LIMIT $1 OFFSET $2
-    `;
-
-    // Query para contar total de usuários únicos
-    const queryContagem = `
-      SELECT COUNT(DISTINCT user_id) as total
+        MIN(created_at) as data_criacao
       FROM "Order"
-      WHERE user_id IS NOT NULL AND customer_email IS NOT NULL
+      WHERE customer_email IS NOT NULL AND customer_email != ''
     `;
-
+    
+    let countQueryBase = `
+      SELECT COUNT(DISTINCT customer_email) as total
+      FROM "Order"
+      WHERE customer_email IS NOT NULL AND customer_email != ''
+    `;
+    
+    // Adicionar filtros se necessário
+    const queryParams = [];
+    let whereConditions = [];
+    
+    // Filtrar por termo de busca
+    if (termoBusca) {
+      queryParams.push(`%${termoBusca}%`);
+      whereConditions.push(`(customer_name ILIKE $${queryParams.length} OR customer_email ILIKE $${queryParams.length})`);
+    }
+    
+    // Adicionar condições WHERE se existirem
+    if (whereConditions.length > 0) {
+      queryUsuariosBase += ` AND ${whereConditions.join(' AND ')}`;
+      countQueryBase += ` AND ${whereConditions.join(' AND ')}`;
+    }
+    
+    // Finalizar a query principal
+    const queryUsuarios = `
+      ${queryUsuariosBase}
+      GROUP BY id, customer_email, customer_name, customer_phone
+      ORDER BY customer_email
+      LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
+    `;
+    
     // Calcular offset para paginação
     const offset = (parseInt(pagina as string) - 1) * parseInt(limite as string);
+    queryParams.push(limite as string);
+    queryParams.push(offset.toString());
+
+    console.log('API /usuarios - Executando query para buscar usuários...');
+    console.log('Query:', queryUsuarios);
+    console.log('Params:', queryParams);
 
     // Buscar usuários e contagem total em paralelo
     const [resultUsuarios, resultContagem] = await Promise.all([
-      ordersPool.query(queryUsuarios, [limite, offset]),
-      ordersPool.query(queryContagem)
+      ordersPool.query(queryUsuarios, queryParams),
+      ordersPool.query(countQueryBase, queryParams.slice(0, queryParams.length - 2))
     ]);
 
     const usuarios = resultUsuarios.rows;
@@ -91,29 +124,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const queryEstatisticas = `
           SELECT 
             COUNT(*) as total_pedidos,
-            SUM(amount) as total_gasto,
+            COALESCE(SUM(amount), 0) as total_gasto,
             MAX(created_at) as ultimo_pedido
           FROM "Order"
-          WHERE user_id = $1
+          WHERE customer_email = $1
         `;
 
         // Buscar serviços mais usados
         const queryServicos = `
-          SELECT service_name, COUNT(*) as quantidade
+          SELECT 
+            COALESCE(service_name, provider_name) as servico_nome, 
+            COUNT(*) as quantidade
           FROM "Order"
-          WHERE user_id = $1 AND service_name IS NOT NULL
-          GROUP BY service_name
+          WHERE customer_email = $1 
+            AND (service_name IS NOT NULL OR provider_name IS NOT NULL)
+          GROUP BY servico_nome
           ORDER BY quantidade DESC
           LIMIT 3
         `;
 
         const [resultEstatisticas, resultServicos] = await Promise.all([
-          ordersPool.query(queryEstatisticas, [usuario.id]),
-          ordersPool.query(queryServicos, [usuario.id])
+          ordersPool.query(queryEstatisticas, [usuario.email]),
+          ordersPool.query(queryServicos, [usuario.email])
         ]);
 
         const estatisticas = resultEstatisticas.rows[0];
-        const servicos = resultServicos.rows.map(row => row.service_name);
+        const servicos = resultServicos.rows.map(row => row.servico_nome);
 
         return {
           ...usuario,
@@ -123,7 +159,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           servicos_usados: servicos
         };
       } catch (error) {
-        console.error(`Erro ao buscar estatísticas para usuário ${usuario.id}:`, error);
+        console.error(`Erro ao buscar estatísticas para usuário ${usuario.email}:`, error);
         return {
           ...usuario,
           total_pedidos: 0,
@@ -151,60 +187,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error(`API /usuarios - Mensagem: ${error.message}`);
     }
     
-    // Dados mockados para desenvolvimento/teste em caso de erro
-    console.log('API /usuarios - Retornando dados mockados como fallback');
-    
-    const mockUsuarios = [
-      {
-        id: '1',
-        nome: 'Maria Silva',
-        email: 'maria@exemplo.com',
-        telefone: '(11) 98765-4321',
-        tipo: 'cliente',
-        ativo: true,
-        data_criacao: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-        ultimo_acesso: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        total_gasto: 1250,
-        total_pedidos: 8,
-        ultimo_pedido: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        servicos_usados: ['Instagram Seguidores', 'Instagram Curtidas']
-      },
-      {
-        id: '2',
-        nome: 'João Santos',
-        email: 'joao@exemplo.com',
-        telefone: '(21) 97654-3210',
-        tipo: 'cliente',
-        ativo: true,
-        data_criacao: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-        ultimo_acesso: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        total_gasto: 950,
-        total_pedidos: 5,
-        ultimo_pedido: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        servicos_usados: ['Instagram Seguidores', 'TikTok Visualizações']
-      },
-      {
-        id: '3',
-        nome: 'Ana Costa',
-        email: 'ana@exemplo.com',
-        telefone: '(31) 96543-2109',
-        tipo: 'admin',
-        ativo: true,
-        data_criacao: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
-        ultimo_acesso: new Date(Date.now() - 0.5 * 24 * 60 * 60 * 1000).toISOString(),
-        total_gasto: 0,
-        total_pedidos: 0,
-        ultimo_pedido: null,
-        servicos_usados: []
-      }
-    ];
-    
-    return res.status(200).json({ 
-      usuarios: mockUsuarios,
-      total: mockUsuarios.length,
-      pagina: parseInt(req.query.pagina as string || '1'),
-      limite: parseInt(req.query.limite as string || '10'),
-      paginas: 1
+    return res.status(500).json({
+      message: 'Erro ao buscar usuários',
+      error: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }
 } 

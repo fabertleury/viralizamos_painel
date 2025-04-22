@@ -1,40 +1,21 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import axios from 'axios';
+import { Pool } from 'pg';
+import * as dotenv from 'dotenv';
 
-interface PedidoFormatado {
-  id: string;
-  status: string;
-  amount: number;
-  created_at: Date;
-  produto_nome?: string;
-  produto_descricao?: string;
-  provedor_nome?: string;
-  provider_order_id?: string;
-  quantidade?: number;
-  transacao_id?: string;
-  error_message?: string;
-  api_response?: any;
-  cliente_nome?: string;
-  cliente_email?: string;
-  cliente_telefone?: string;
-  cliente_id?: string;
-  historico?: Array<{
-    data: Date;
-    status: string;
-    descricao: string;
-  }>;
-  metadados?: Record<string, any>;
-  transacao_detalhes?: {
-    status: string;
-    metodo_pagamento?: string;
-    data_pagamento?: Date;
-    parcelas?: number;
-    valor_parcela?: number;
-  };
-}
+dotenv.config();
+
+// Conexão com o banco de dados de orders
+const ordersPool = new Pool({
+  connectionString: process.env.DATABASE_URL_ORDERS,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+// Inicializar o pool e testar a conexão
+ordersPool.on('error', (err) => {
+  console.error('Erro inesperado no pool de pedidos', err);
+});
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Tratar apenas requisições GET
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Método não permitido' });
   }
@@ -42,110 +23,141 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { id } = req.query;
   
   if (!id || Array.isArray(id)) {
-    return res.status(400).json({ message: 'ID de pedido inválido' });
+    return res.status(400).json({ message: 'ID inválido' });
   }
 
   try {
-    // Recuperar o token
-    const authToken = req.headers.authorization;
-    
-    if (!authToken || !authToken.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Não autorizado' });
-    }
-    
-    // Chamar a API de orders para obter detalhes do pedido
-    const ordersApiUrl = process.env.NEXT_PUBLIC_ORDERS_API_URL;
-    
-    // Verificar se a URL da API está configurada
-    if (!ordersApiUrl) {
-      console.error('URL da API de pedidos não configurada');
-      return res.status(500).json({ 
-        message: 'Erro de configuração do servidor',
-        mock: true,
-        id: id,
-        status: 'pending',
-        amount: 49.9,
-        created_at: new Date(),
-        produto_nome: 'Produto (mock)',
-        cliente_nome: 'Cliente (mock)',
-        cliente_email: 'cliente@exemplo.com'
-      });
-    }
-    
-    console.log(`Buscando detalhes do pedido ${id} na API de pedidos...`);
-    
-    const response = await axios.get(`${ordersApiUrl}/api/orders/${id}`, {
-      headers: {
-        'Authorization': `ApiKey ${process.env.ORDERS_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 5000 // 5 segundos
-    });
-    
-    // Mapear a resposta da API para o formato esperado pelo frontend
-    const pedidoData = response.data;
-    
-    const pedidoFormatado: PedidoFormatado = {
-      id: pedidoData.id,
-      status: pedidoData.status,
-      amount: pedidoData.price || pedidoData.amount,
-      created_at: pedidoData.created_at,
-      produto_nome: pedidoData.service_name || pedidoData.product_name,
-      produto_descricao: pedidoData.service_description,
-      provedor_nome: pedidoData.provider_name,
-      provider_order_id: pedidoData.provider_order_id,
-      quantidade: pedidoData.quantity,
-      transacao_id: pedidoData.transaction_id,
-      error_message: pedidoData.error_message,
-      api_response: pedidoData.api_response,
-      cliente_nome: pedidoData.user_name || pedidoData.customer_name,
-      cliente_email: pedidoData.user_email || pedidoData.customer_email,
-      cliente_telefone: pedidoData.user_phone || pedidoData.customer_phone,
-      cliente_id: pedidoData.user_id || pedidoData.customer_id,
-      historico: pedidoData.history ? pedidoData.history.map((item: any) => ({
-        data: item.created_at || item.date,
-        status: item.status,
-        descricao: item.description || item.message
-      })) : [],
-      metadados: pedidoData.metadata
-    };
+    console.log(`[${new Date().toISOString()}] Buscando detalhes do pedido ID: ${id}`);
 
-    // Adicionar detalhes da transação, se disponíveis
-    if (pedidoData.transaction) {
-      pedidoFormatado.transacao_detalhes = {
-        status: pedidoData.transaction.status,
-        metodo_pagamento: pedidoData.transaction.payment_method,
-        data_pagamento: pedidoData.transaction.approved_at,
-        parcelas: pedidoData.transaction.installments,
-        valor_parcela: pedidoData.transaction.installment_amount
-      };
+    // Buscar detalhes do pedido
+    const detailsQuery = `
+      SELECT 
+        o.id, 
+        o.created_at, 
+        o.updated_at,
+        o.provider_id,
+        p.name as provedor_nome,
+        o.quantity as quantidade,
+        o.amount as valor,
+        o.status,
+        o.customer_name as cliente_nome,
+        o.customer_email as cliente_email,
+        o.customer_phone as cliente_telefone,
+        o.transaction_id,
+        o.external_order_id as provider_order_id,
+        o.target_username,
+        o.target_url,
+        o.service_id,
+        COALESCE(o.service_name, p.name || ' ' || o.service_type, 'Serviço não especificado') as produto_nome,
+        o.service_type,
+        o.payment_method,
+        o.payment_status,
+        o.user_id as cliente_id
+      FROM 
+        "Order" o
+      LEFT JOIN 
+        "Provider" p ON o.provider_id = p.id
+      WHERE 
+        o.id = $1
+    `;
+    
+    const detailsResult = await ordersPool.query(detailsQuery, [id]);
+    
+    if (detailsResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Pedido não encontrado' });
     }
     
-    return res.status(200).json(pedidoFormatado);
+    const pedido = detailsResult.rows[0];
     
-  } catch (error: any) {
+    // Buscar logs do pedido
+    const logsQuery = `
+      SELECT 
+        id,
+        order_id,
+        level,
+        message,
+        data,
+        created_at
+      FROM 
+        "OrderLog"
+      WHERE 
+        order_id = $1
+      ORDER BY 
+        created_at DESC
+      LIMIT 50
+    `;
+    
+    const logsResult = await ordersPool.query(logsQuery, [id]);
+    
+    // Processar os dados para o formato que o frontend espera
+    const historico = logsResult.rows.map(log => ({
+      id: log.id,
+      data: log.created_at,
+      status: log.level,
+      descricao: log.message,
+      detalhes: log.data
+    }));
+    
+    // Construir metadados adicionais a partir dos campos disponíveis
+    const metadados: Record<string, any> = {
+      cliente: {
+        nome: pedido.cliente_nome,
+        email: pedido.cliente_email,
+        telefone: pedido.cliente_telefone
+      },
+      servico: {
+        nome: pedido.produto_nome,
+        tipo: pedido.service_type,
+        quantidade: pedido.quantidade
+      },
+      provedor: {
+        nome: pedido.provedor_nome,
+        id: pedido.provider_id,
+        order_id: pedido.provider_order_id
+      },
+      pagamento: {
+        metodo: pedido.payment_method,
+        status: pedido.payment_status,
+        transacao_id: pedido.transaction_id
+      },
+      target: {
+        username: pedido.target_username,
+        url: pedido.target_url
+      },
+      datas: {
+        criacao: pedido.created_at,
+        atualizacao: pedido.updated_at
+      }
+    };
+    
+    // Formatar resposta final
+    const pedidoDetalhado = {
+      id: pedido.id,
+      status: pedido.status,
+      created_at: pedido.created_at,
+      updated_at: pedido.updated_at,
+      quantidade: pedido.quantidade,
+      valor: parseFloat(pedido.valor) || 0,
+      produto_nome: pedido.produto_nome,
+      provedor_nome: pedido.provedor_nome,
+      provider_order_id: pedido.provider_order_id,
+      transacao_id: pedido.transaction_id,
+      cliente_nome: pedido.cliente_nome,
+      cliente_email: pedido.cliente_email,
+      cliente_telefone: pedido.cliente_telefone,
+      cliente_id: pedido.cliente_id,
+      metadados: metadados,
+      historico: historico
+    };
+    
+    console.log(`[${new Date().toISOString()}] Detalhes do pedido ${id} recuperados com sucesso`);
+    
+    return res.status(200).json(pedidoDetalhado);
+  } catch (error) {
     console.error('Erro ao buscar detalhes do pedido:', error);
-    
-    // Verificar se é um erro de timeout ou conexão
-    const isConnectionError = error.code === 'ECONNABORTED' || error.code === 'ECONNREFUSED';
-    
-    // Em caso de erro, retornar dados simulados para visualização
-    return res.status(200).json({
-      id: id,
-      data_criacao: new Date(),
-      provedor_id: 'mock-prov',
-      provedor_nome: 'Provedor (offline)',
-      produto_id: 'mock-prod',
-      produto_nome: 'Produto de teste',
-      quantidade: 100,
-      valor: 50.0,
-      status: 'pending',
-      cliente_id: 'mock-client',
-      cliente_nome: 'Cliente de teste',
-      cliente_email: 'teste@exemplo.com',
-      error_message: 'Dados simulados devido a erro de conexão com o serviço de pedidos',
-      mock: true,
-      error: isConnectionError ? 'Serviço temporariamente indisponível' : 'Erro ao processar pedido'
+    return res.status(500).json({ 
+      message: 'Erro ao buscar detalhes do pedido',
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
     });
   }
 } 

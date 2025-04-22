@@ -114,7 +114,7 @@ export async function buscarPedidos(
         o.provider_id as provedor_id,
         p.name as provedor_nome,
         o.service_id as produto_id,
-        o.target_username as produto_nome,
+        COALESCE(o.service_name, p.name || ' ' || o.service_type, 'Serviço não especificado') as produto_nome,
         o.quantity as quantidade,
         o.amount as valor,
         o.status,
