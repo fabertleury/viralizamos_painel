@@ -40,24 +40,54 @@ import Link from 'next/link';
 // Importar o serviço de usuários
 import { buscarUsuarios as buscarUsuariosService } from '../services/usuariosService';
 
-// Função para buscar usuários detalhados
+// Função para buscar usuários detalhados com fallback para API direta
 const buscarUsuariosDetalhados = async (filtros: any, pagina: number, limite: number) => {
   try {
     console.log('Buscando usuários com filtros:', filtros, 'página:', pagina, 'limite:', limite);
     
-    // Usar o serviço de usuários diretamente
-    const resultado = await buscarUsuariosService({
-      tipo: filtros.tipo,
-      status: filtros.status,
-      termoBusca: filtros.termoBusca,
-      pagina: pagina,
-      limite: limite
-    });
+    // Primeiro, tentar usar o serviço de usuários diretamente
+    try {
+      const resultado = await buscarUsuariosService({
+        tipo: filtros.tipo,
+        status: filtros.status,
+        termoBusca: filtros.termoBusca,
+        pagina: pagina,
+        limite: limite
+      });
+      
+      console.log('Resultado da busca de usuários via serviço:', resultado);
+      if (resultado && resultado.usuarios && resultado.usuarios.length > 0) {
+        return resultado;
+      }
+    } catch (serviceError) {
+      console.error('Erro ao usar serviço de usuários:', serviceError);
+      // Continuar para o fallback
+    }
     
-    console.log('Resultado da busca de usuários:', resultado);
-    return resultado;
+    // Fallback: chamar a API diretamente
+    console.log('Tentando fallback: chamada direta à API');
+    const queryParams = new URLSearchParams();
+    
+    if (filtros.tipo) queryParams.append('tipo', filtros.tipo);
+    if (filtros.status) queryParams.append('status', filtros.status);
+    if (filtros.termoBusca) queryParams.append('termoBusca', filtros.termoBusca);
+    
+    queryParams.append('pagina', pagina.toString());
+    queryParams.append('limite', limite.toString());
+    
+    const response = await fetch(`/api/usuarios?${queryParams.toString()}`);
+    
+    if (!response.ok) {
+      throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log('Resultado da busca de usuários via API direta:', data);
+    return data;
   } catch (error) {
-    console.error('Erro ao buscar usuários:', error);
+    console.error('Erro ao buscar usuários (todos os métodos falharam):', error);
+    
+    // Último recurso: retornar uma lista vazia
     return { usuarios: [], total: 0, pagina: 1, limite: 10, paginas: 0 };
   }
 };
