@@ -152,13 +152,13 @@ export default function Pedidos() {
       
       console.log('Resposta da API de pedidos:', response.data);
       
-      // Verifica se a resposta contém dados reais ou mockados
-      if (response.data.mock) {
-        // Se forem dados mockados, exibe um aviso
+      // Verifica se a resposta contém erro
+      if (response.data.error) {
+        // Se houver erro, exibe um aviso
         toast({
-          title: 'Aviso: Dados temporários',
-          description: 'Exibindo dados temporários. O sistema tentará reconectar ao banco de dados em breve.',
-          status: 'warning',
+          title: 'Erro ao carregar dados',
+          description: response.data.error,
+          status: 'error',
           duration: 5000,
           isClosable: true,
         });
@@ -169,29 +169,14 @@ export default function Pedidos() {
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       
-      // Se a API estiver indisponível, usar dados mockados
-      const mockPedidos: Pedido[] = Array.from({ length: 5 }).map((_, i) => ({
-        id: `mock-${i+1}`,
-        data_criacao: new Date(),
-        provedor_id: 'mock-prov',
-        provedor_nome: 'Provedor (offline)',
-        produto_id: 'mock-prod',
-        produto_nome: 'Produto de teste',
-        quantidade: 100,
-        valor: 50.0,
-        status: ['pendente', 'processando', 'completo', 'falha', 'cancelado', 'parcial'][Math.floor(Math.random() * 6)],
-        cliente_id: 'mock-client',
-        cliente_nome: 'Cliente de teste',
-        cliente_email: 'teste@exemplo.com'
-      }));
-      
-      setPedidos(mockPedidos);
-      setTotalPedidos(mockPedidos.length);
+      // Em caso de erro, mostrar lista vazia
+      setPedidos([]);
+      setTotalPedidos(0);
       
       // Exibir mensagem de erro
       toast({
         title: 'Erro ao carregar pedidos',
-        description: 'Utilizando dados offline. O sistema tentará reconectar em breve.',
+        description: error instanceof Error ? error.message : 'Erro na conexão com o servidor. Tente novamente mais tarde.',
         status: 'error',
         duration: 5000,
         isClosable: true,

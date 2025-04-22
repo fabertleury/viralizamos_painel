@@ -4,12 +4,20 @@ import axios from 'axios';
 // Impede erros durante o processo de build
 const isServerSide = typeof window === 'undefined';
 
-// Verifica se devemos usar dados mockados
-const useMockData = process.env.USE_MOCK_DATA === 'true';
+// Nunca devemos usar dados mockados
+const useMockData = false;
 
 // Conexão com o banco de dados de orders
 // Prioriza ORDERS_DATABASE_URL, mas também aceita DATABASE_URL_ORDERS como fallback
 const ordersDbUrl = process.env.ORDERS_DATABASE_URL || process.env.DATABASE_URL_ORDERS;
+
+// Log das variáveis de ambiente para depuração (sem exibir valores completos por segurança)
+console.log('Variáveis de ambiente:');
+console.log('- ORDERS_API_URL definido:', !!process.env.ORDERS_API_URL);
+console.log('- ORDERS_API_KEY definido:', !!process.env.ORDERS_API_KEY);
+console.log('- ORDERS_DATABASE_URL definido:', !!process.env.ORDERS_DATABASE_URL);
+console.log('- DATABASE_URL_ORDERS definido:', !!process.env.DATABASE_URL_ORDERS);
+console.log('- URL do banco que será usada:', ordersDbUrl ? `${ordersDbUrl.substring(0, 15)}...` : 'nenhuma');
 
 // Só cria o pool se não estiver usando dados mockados e a URL estiver definida
 export const ordersPool = !useMockData && isServerSide && process.env.NEXT_PHASE !== 'phase-production-build' && ordersDbUrl
@@ -24,6 +32,112 @@ export const ordersPool = !useMockData && isServerSide && process.env.NEXT_PHASE
       max: 10
     })
   : null;
+  
+console.log('Pool de conexão inicializado:', !!ordersPool);
+
+// Função para obter pedidos recentes
+export async function obterPedidosRecentes(limite: number = 5): Promise<Pedido[]> {
+  // Se estiver em build, retornar dados vazios
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    console.log('Pulando obtenção de pedidos recentes durante o build');
+    return [];
+  }
+
+  try {
+    // Tentar obter pedidos recentes via API
+    if (ordersApiUrl && ordersApiKey) {
+      try {
+        const response = await axios.get(`${ordersApiUrl}/dashboard/recent-orders`, {
+          params: { limit: limite },
+          headers: {
+            'Authorization': `Bearer ${ordersApiKey}`
+          },
+          timeout: 5000
+        });
+
+        if (response.data && Array.isArray(response.data)) {
+          console.log(`Obtidos ${response.data.length} pedidos recentes via API`);
+          
+          // Mapear os dados da API para o formato esperado
+          return response.data.map((order: any) => ({
+            id: order.id,
+            data_criacao: new Date(order.created_at),
+            provedor_id: order.provider_id,
+            provedor_nome: order.provider?.name || 'Desconhecido',
+            produto_id: order.service_id,
+            produto_nome: order.service_name || `Serviço ${order.service_type || ''}`,
+            quantidade: order.quantity,
+            valor: order.amount,
+            status: order.status,
+            cliente_id: order.user_id,
+            cliente_nome: order.customer_name || 'Cliente',
+            cliente_email: order.customer_email || '',
+            transacao_id: order.transaction_id,
+            provider_order_id: order.external_order_id
+          }));
+        }
+      } catch (error) {
+        console.error('Erro ao obter pedidos recentes via API:', error);
+        // Se falhar via API, tenta via banco de dados
+      }
+    }
+    
+    // Se não conseguiu via API, tenta via banco de dados
+    const { success, pool } = await testarConexaoDB();
+    if (!success || !pool) {
+      throw new Error('Pool de conexão não inicializado');
+    }
+    
+    const query = `
+      SELECT 
+        o.id, 
+        o.created_at as data_criacao, 
+        o.provider_id as provedor_id,
+        p.name as provedor_nome,
+        o.service_id as produto_id,
+        o.service_type as produto_nome,
+        o.quantity as quantidade,
+        o.amount as valor,
+        o.status,
+        o.user_id as cliente_id,
+        o.customer_name as cliente_nome,
+        o.customer_email as cliente_email,
+        o.transaction_id as transacao_id,
+        o.external_order_id as provider_order_id
+      FROM 
+        "Order" o
+      LEFT JOIN 
+        "Provider" p ON o.provider_id = p.id
+      ORDER BY 
+        o.created_at DESC
+      LIMIT $1
+    `;
+    
+    const result = await pool.query(query, [limite]);
+    console.log(`Obtidos ${result.rows.length} pedidos recentes via banco de dados`);
+    
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      data_criacao: new Date(row.data_criacao),
+      provedor_id: row.provedor_id,
+      provedor_nome: row.provedor_nome || 'Desconhecido',
+      produto_id: row.produto_id,
+      produto_nome: row.produto_nome || 'Serviço não especificado',
+      quantidade: row.quantidade || 0,
+      valor: row.valor || 0,
+      status: row.status,
+      cliente_id: row.cliente_id,
+      cliente_nome: row.cliente_nome || 'Cliente',
+      cliente_email: row.cliente_email || '',
+      transacao_id: row.transacao_id,
+      provider_order_id: row.provider_order_id
+    }));
+  } catch (error) {
+    console.error('Erro ao obter pedidos recentes:', error);
+    // Em caso de erro, retornar lista vazia
+    return [];
+  }
+}
 
 // Verificar conexão com o banco de dados
 if (ordersPool) {
@@ -41,25 +155,21 @@ const ordersApiUrl = process.env.ORDERS_API_URL;
 const ordersApiKey = process.env.ORDERS_API_KEY;
 
 // Função para testar conexão com o banco ou API
-export async function testarConexaoDB() {
-  // Se não estiver no servidor ou em modo de build, retorna true
+export async function testarConexaoDB(): Promise<{ success: boolean; pool: Pool | null }> {
+  // Se não estiver no servidor ou em modo de build, retorna sucesso sem pool
   if (!isServerSide || process.env.NEXT_PHASE === 'phase-production-build') {
     console.log('Pulando verificação de conexão durante build ou no cliente');
-    return true;
-  }
-
-  // Se estiver usando dados mockados, retorna true
-  if (useMockData) {
-    console.log('Usando dados mockados, pulando verificação de conexão');
-    return true;
+    return { success: true, pool: null };
   }
 
   // Tenta primeiro verificar a API se estiver configurada
   if (ordersApiUrl && ordersApiKey) {
     try {
       console.log('Testando conexão com a API de orders...');
-      // Usando o endpoint de health correto
-      const response = await axios.get(`${ordersApiUrl}/health`, {
+      console.log(`URL da API: ${ordersApiUrl}`);
+      // Verificando a saúde do serviço
+      // Tentando acessar a raiz da API
+      const response = await axios.get(`${ordersApiUrl}`, {
         headers: {
           'Authorization': `Bearer ${ordersApiKey}`
         },
@@ -68,7 +178,7 @@ export async function testarConexaoDB() {
       
       if (response.status === 200) {
         console.log('Conexão com a API de orders estabelecida com sucesso.');
-        return true;
+        return { success: true, pool: ordersPool };
       }
     } catch (error) {
       console.error('Erro ao conectar com a API de orders:', error);
@@ -79,7 +189,7 @@ export async function testarConexaoDB() {
   // Se não conseguiu conectar à API ou ela não está configurada, tenta o banco de dados
   if (!ordersPool) {
     console.error('Pool de conexão não foi inicializado');
-    return false;
+    return { success: false, pool: null };
   }
 
   let client;
@@ -100,10 +210,10 @@ export async function testarConexaoDB() {
     console.log('Tabelas disponíveis:', tablesQuery.rows.map(r => r.table_name).join(', '));
     
     console.log('Conexão com o banco de dados estabelecida com sucesso.');
-    return true;
+    return { success: true, pool: ordersPool };
   } catch (error) {
     console.error('Erro ao conectar com o banco de dados:', error);
-    return false;
+    return { success: false, pool: null };
   } finally {
     if (client) {
       client.release();
@@ -129,6 +239,48 @@ export interface Pedido {
   provider_order_id?: string;
 }
 
+// Função auxiliar para mapear pedidos para o formato esperado
+function mapearPedidosParaFormato(pedidosData: any[], total: number): { pedidos: Pedido[]; total: number } {
+  // Traduzir status conforme a convenção definida na memória
+  const traduzirStatus = (status: string): string => {
+    const statusMap: {[key: string]: string} = {
+      'pending': 'pendente',
+      'processing': 'processando',
+      'in_progress': 'processando',
+      'completed': 'concluido',
+      'success': 'concluido',
+      'failed': 'falhou',
+      'rejected': 'falhou',
+      'canceled': 'cancelado',
+      'partial': 'parcial'
+    };
+    
+    return statusMap[status.toLowerCase()] || status;
+  };
+  
+  const pedidos = pedidosData.map((order: any) => ({
+    id: order.id,
+    data_criacao: new Date(order.created_at),
+    provedor_id: order.provider_id,
+    provedor_nome: order.provider?.name || order.provedor_nome || 'Desconhecido',
+    produto_id: order.service_id,
+    produto_nome: order.service_name || order.produto_nome || `Serviço ${order.service_type || ''}`,
+    quantidade: order.quantity || order.quantidade || 0,
+    valor: order.amount || order.valor || 0,
+    status: traduzirStatus(order.status),
+    cliente_id: order.user_id || order.cliente_id || '',
+    cliente_nome: order.customer_name || order.cliente_nome || 'Cliente',
+    cliente_email: order.customer_email || order.cliente_email || '',
+    transacao_id: order.transaction_id || order.transacao_id || '',
+    provider_order_id: order.external_order_id || order.provider_order_id || ''
+  }));
+  
+  return {
+    pedidos,
+    total
+  };
+}
+
 // Função para buscar pedidos com filtros
 export async function buscarPedidos(
   filtros: {
@@ -147,13 +299,10 @@ export async function buscarPedidos(
     return { pedidos: [], total: 0 };
   }
 
-  // Se estiver usando dados mockados, retornar dados mockados
+  // Não usar mais dados mockados, apenas dados reais
   if (useMockData) {
-    console.log('Usando dados mockados para pedidos');
-    return {
-      pedidos: gerarPedidosMockados(limite),
-      total: 50 // Valor fixo para simular um total maior
-    };
+    console.log('Configuração USE_MOCK_DATA está ativa, mas não será usada para pedidos');
+    // Continua a execução para buscar dados reais
   }
 
   // Tenta buscar via API primeiro se estiver configurada
@@ -186,46 +335,86 @@ export async function buscarPedidos(
         params.end_date = filtros.dataFim;
       }
       
-      // Usando o endpoint correto para buscar pedidos
-      // A API usa o endpoint /api/orders/find para buscar pedidos
-      const response = await axios.get(`${ordersApiUrl}/orders/find`, {
-        params,
-        headers: {
-          'Authorization': `Bearer ${ordersApiKey}`
-        },
-        timeout: 10000
-      });
+      // Tentando acessar a API para buscar pedidos
+      // Usamos o endpoint panel-orders que foi criado especificamente para o painel
+      try {
+        console.log('Tentando acessar o endpoint panel-orders para buscar pedidos...');
+        console.log(`URL completa: ${ordersApiUrl}/admin/panel-orders`);
+        console.log(`Parâmetros: ${JSON.stringify(params)}`);
+        
+        const response = await axios.get(`${ordersApiUrl}/admin/panel-orders`, {
+          params,
+          headers: {
+            'Authorization': `Bearer ${ordersApiKey}`
+          },
+          timeout: 10000
+        });
+        
+        // Se a resposta for bem-sucedida, retornamos os dados
+        if (response.data && response.data.orders) {
+          console.log(`Encontrados ${response.data.orders.length} pedidos via API panel-orders`);
+          console.log(`Total de itens: ${response.data.totalItems}, Página: ${response.data.page}, Total de páginas: ${response.data.totalPages}`);
+          
+          return mapearPedidosParaFormato(response.data.orders, response.data.totalItems);
+        }
+      } catch (apiError) {
+        console.error('Erro ao acessar o endpoint panel-orders:', apiError);
+        // Continua para tentar o banco de dados diretamente
+      }
       
-      if (response.data && response.data.orders) {
-        console.log(`Encontrados ${response.data.orders.length} pedidos via API`);
-        
-        // Mapear os dados da API para o formato esperado
-        const pedidos = response.data.orders.map((order: any) => ({
-          id: order.id,
-          data_criacao: new Date(order.created_at),
-          provedor_id: order.provider_id,
-          provedor_nome: order.provider_name,
-          produto_id: order.service_id,
-          produto_nome: order.service_name,
-          quantidade: order.quantity,
-          valor: order.amount,
-          status: order.status,
-          cliente_id: order.user_id,
-          cliente_nome: order.customer_name,
-          cliente_email: order.customer_email,
-          transacao_id: order.transaction_id,
-          provider_order_id: order.external_order_id
-        }));
-        
-        return {
-          pedidos,
-          total: response.data.total || pedidos.length
-        };
+      // Se o endpoint panel-orders falhar, tentamos o endpoint dashboard/recent-orders como fallback
+      try {
+        console.log('Tentando acessar o endpoint dashboard/recent-orders como fallback...');
+        const response = await axios.get(`${ordersApiUrl}/dashboard/recent-orders`, {
+          headers: {
+            'Authorization': `Bearer ${ordersApiKey}`
+          },
+          timeout: 10000
+        });
+      
+        if (response.data && Array.isArray(response.data)) {
+          console.log(`Encontrados ${response.data.length} pedidos via API dashboard/recent-orders`);
+          
+          // Como este endpoint não suporta paginação, aplicamos os filtros manualmente
+          let pedidosFiltrados = response.data;
+          
+          // Aplicar filtros manualmente se necessário
+          if (filtros.status && filtros.status !== 'todos') {
+            pedidosFiltrados = pedidosFiltrados.filter(order => order.status === filtros.status);
+          }
+          
+          if (filtros.provedor && filtros.provedor !== 'todos') {
+            pedidosFiltrados = pedidosFiltrados.filter(order => order.provider_id === filtros.provedor);
+          }
+          
+          if (filtros.termoBusca) {
+            const termoBusca = filtros.termoBusca.toLowerCase();
+            pedidosFiltrados = pedidosFiltrados.filter(order => 
+              (order.transaction_id && order.transaction_id.toLowerCase().includes(termoBusca)) ||
+              (order.customer_email && order.customer_email.toLowerCase().includes(termoBusca)) ||
+              (order.customer_name && order.customer_name.toLowerCase().includes(termoBusca))
+            );
+          }
+          
+          // Aplicar paginação manualmente
+          const total = pedidosFiltrados.length;
+          const inicio = (pagina - 1) * limite;
+          const fim = Math.min(inicio + limite, total);
+          pedidosFiltrados = pedidosFiltrados.slice(inicio, fim);
+          
+          return mapearPedidosParaFormato(pedidosFiltrados, total);
+        }
+      } catch (fallbackApiError) {
+        console.error('Erro ao acessar o endpoint fallback:', fallbackApiError);
+        // Continua para tentar o banco de dados diretamente
       }
     } catch (apiError) {
       console.error('Erro ao buscar pedidos via API:', apiError);
       // Se falhar a API, tenta o banco de dados como fallback
     }
+
+    // Se chegou aqui, nenhuma das tentativas de API funcionou
+    // Vamos tentar acessar o banco de dados diretamente como fallback
   }
 
   // Se a API não estiver configurada ou falhar, tenta o banco de dados
@@ -233,13 +422,22 @@ export async function buscarPedidos(
     // Verificar se a conexão está OK antes de executar
     console.log(`Iniciando busca de pedidos via banco de dados. Filtros: ${JSON.stringify(filtros)}, Página: ${pagina}, Limite: ${limite}`);
     
-    if (!ordersPool) {
+    // Obter o pool de conexão através da função testarConexaoDB
+    const { success, pool } = await testarConexaoDB();
+    if (!success || !pool) {
+      console.error('Pool de conexão não inicializado. Verificando variáveis de ambiente:');
+      console.error('ORDERS_DATABASE_URL:', process.env.ORDERS_DATABASE_URL ? 'definido' : 'não definido');
+      console.error('DATABASE_URL_ORDERS:', process.env.DATABASE_URL_ORDERS ? 'definido' : 'não definido');
       throw new Error('Pool de conexão não inicializado');
     }
+    
+    console.log('Conexão com o banco de dados estabelecida com sucesso.');
     
     const offset = (pagina - 1) * limite;
     
     // Consulta corrigida para a tabela "Order" do Prisma
+    // Usando os nomes exatos das tabelas conforme definidos no banco de dados
+    // Importante: No Supabase/Prisma, as tabelas são definidas no singular mas com inicial maiúscula
     let query = `
       SELECT 
         o.id, 
@@ -289,35 +487,46 @@ export async function buscarPedidos(
     
     if (filtros.termoBusca) {
       query += ` AND (
-        o.id::text ILIKE $${paramCount} OR 
-        o.customer_name ILIKE $${paramCount} OR 
-        o.customer_email ILIKE $${paramCount} OR
-        o.target_username ILIKE $${paramCount} OR
-        o.external_order_id ILIKE $${paramCount}
+        o.transaction_id ILIKE $${paramCount++} OR
+        o.customer_email ILIKE $${paramCount++} OR
+        o.customer_name ILIKE $${paramCount++}
       )`;
-      queryParams.push(`%${filtros.termoBusca}%`);
-      paramCount++;
+      const termoBuscaLike = `%${filtros.termoBusca}%`;
+      queryParams.push(termoBuscaLike, termoBuscaLike, termoBuscaLike);
     }
     
     // Query para contagem total
     const countQuery = `SELECT COUNT(*) FROM (${query}) AS count_query`;
-    const countResult = await ordersPool.query(countQuery, queryParams);
-    const total = parseInt(countResult.rows[0].count);
+    console.log('Executando query de contagem:', countQuery);
+    console.log('Parâmetros:', queryParams);
     
-    // Adicionar ordenação e paginação
-    query += ` ORDER BY o.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
-    queryParams.push(limite);
-    queryParams.push(offset);
+    let total = 0;
+    let result;
     
-    console.log('Executando query final');
-    
-    const result = await ordersPool.query(query, queryParams);
-    console.log(`Encontrados ${result.rows.length} pedidos`);
-    
-    return {
-      pedidos: result.rows,
-      total
-    };
+    try {
+      const countResult = await pool.query(countQuery, queryParams);
+      total = parseInt(countResult.rows[0].count);
+      console.log(`Total de pedidos encontrados: ${total}`);
+      
+      // Adicionar ordenação e paginação
+      query += ` ORDER BY o.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
+      queryParams.push(limite);
+      queryParams.push(offset);
+      
+      console.log('Executando query final:', query);
+      console.log('Parâmetros finais:', queryParams);
+      
+      result = await pool.query(query, queryParams);
+      console.log(`Resultado da query: ${result.rows.length} pedidos encontrados`);
+      
+      return {
+        pedidos: result.rows,
+        total
+      };
+    } catch (queryError) {
+      console.error('Erro ao executar query SQL:', queryError);
+      throw queryError;
+    }
   } catch (dbError) {
     console.error('Erro ao buscar pedidos do banco de dados:', dbError);
     // Log detalhado do erro
@@ -326,47 +535,20 @@ export async function buscarPedidos(
       console.error(`Stack trace: ${dbError.stack}`);
     }
     
-    // Se falhar o banco de dados, retorna dados mockados como último recurso
-    console.log('Usando dados mockados como fallback após falha na conexão');
+    // Se falhar o banco de dados, retornar erro em vez de dados mockados
+    console.error('Falha na conexão com o banco de dados e API');
     return {
-      pedidos: gerarPedidosMockados(limite),
-      total: 50
+      pedidos: [],
+      total: 0
     };
   }
 }
 
-// Função para gerar pedidos mockados
-function gerarPedidosMockados(quantidade: number): Pedido[] {
-  const status = ['pendente', 'processando', 'completo', 'falha', 'cancelado', 'parcial'];
-  const provedores = ['Provedor A', 'Provedor B', 'Provedor C'];
-  const produtos = ['Likes Instagram', 'Seguidores Instagram', 'Views TikTok', 'Inscritos YouTube'];
-  
-  return Array.from({ length: quantidade }).map((_, i) => {
-    const dataBase = new Date();
-    dataBase.setDate(dataBase.getDate() - Math.floor(Math.random() * 30));
-    
-    return {
-      id: `mock-${Date.now()}-${i}`,
-      data_criacao: dataBase,
-      provedor_id: `prov-${i % 3}`,
-      provedor_nome: provedores[i % provedores.length],
-      produto_id: `prod-${i % 4}`,
-      produto_nome: produtos[i % produtos.length],
-      quantidade: Math.floor(Math.random() * 1000) + 100,
-      valor: parseFloat((Math.random() * 100 + 10).toFixed(2)),
-      status: status[i % status.length],
-      cliente_id: `client-${i}`,
-      cliente_nome: `Cliente Teste ${i}`,
-      cliente_email: `cliente${i}@teste.com`,
-      transacao_id: `trans-${i}`,
-      provider_order_id: `ext-${i}`
-    };
-  });
-}
-
 // Função para buscar um pedido específico
 export async function buscarPedidoPorId(id: string): Promise<Pedido | null> {
-  if (!ordersPool) {
+  // Obter o pool de conexão através da função testarConexaoDB
+  const { success, pool } = await testarConexaoDB();
+  if (!success || !pool) {
     throw new Error('Pool de conexão não inicializado');
   }
   
@@ -378,26 +560,19 @@ export async function buscarPedidoPorId(id: string): Promise<Pedido | null> {
         o.provider_id as provedor_id,
         p.name as provedor_nome,
         o.service_id as produto_id,
-        s.name as produto_nome,
+        o.service_type as produto_nome,
         o.quantity as quantidade,
-        o.price as valor,
+        o.amount as valor,
         o.status,
         o.user_id as cliente_id,
-        u.name as cliente_nome,
-        u.email as cliente_email,
+        o.customer_name as cliente_nome,
+        o.customer_email as cliente_email,
         o.transaction_id as transacao_id,
-        o.provider_order_id,
-        o.api_response,
-        o.error_message,
-        o.last_check
+        o.external_order_id as provider_order_id
       FROM 
-        orders o
+        "Order" o
       LEFT JOIN 
-        providers p ON o.provider_id = p.id
-      LEFT JOIN 
-        services s ON o.service_id = s.id
-      LEFT JOIN 
-        users u ON o.user_id = u.id
+        "Provider" p ON o.provider_id = p.id
       WHERE 
         o.id = $1
     `;
@@ -417,23 +592,22 @@ export async function buscarPedidoPorId(id: string): Promise<Pedido | null> {
 
 // Função para reenviar um pedido
 export async function reenviarPedido(id: string): Promise<boolean> {
-  if (!ordersPool) {
+  // Obter o pool de conexão através da função testarConexaoDB
+  const { success, pool } = await testarConexaoDB();
+  if (!success || !pool) {
     throw new Error('Pool de conexão não inicializado');
   }
   
   try {
     // Atualizando o status do pedido para "processando" e marcando para reprocessamento
     const query = `
-      UPDATE orders
+      UPDATE "Order"
       SET 
-        status = 'processando',
-        retry_count = 0,
-        last_check = NULL,
-        error_message = NULL,
+        status = 'processing',
         updated_at = NOW()
       WHERE 
         id = $1 AND 
-        (status = 'falha' OR status = 'pendente')
+        (status = 'failed' OR status = 'pending')
       RETURNING id
     `;
     
@@ -457,7 +631,9 @@ export async function reenviarPedido(id: string): Promise<boolean> {
 
 // Função para obter estatísticas de pedidos
 export async function obterEstatisticasPedidos(): Promise<any> {
-  if (!ordersPool) {
+  // Obter o pool de conexão através da função testarConexaoDB
+  const { success, pool } = await testarConexaoDB();
+  if (!success || !pool) {
     throw new Error('Pool de conexão não inicializado');
   }
   
@@ -465,13 +641,13 @@ export async function obterEstatisticasPedidos(): Promise<any> {
     const query = `
       SELECT 
         COUNT(*) as total_pedidos,
-        SUM(CASE WHEN status = 'completo' THEN 1 ELSE 0 END) as total_completos,
-        SUM(CASE WHEN status = 'processando' THEN 1 ELSE 0 END) as total_processando,
-        SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as total_pendentes,
-        SUM(CASE WHEN status = 'falha' THEN 1 ELSE 0 END) as total_falhas,
-        SUM(price) as valor_total
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as total_completos,
+        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as total_processando,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as total_pendentes,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as total_falhas,
+        SUM(amount) as valor_total
       FROM 
-        orders
+        "Order"
       WHERE 
         created_at >= NOW() - INTERVAL '30 days'
     `;
@@ -487,7 +663,9 @@ export async function obterEstatisticasPedidos(): Promise<any> {
 
 // Função para obter pedidos por período (para gráficos)
 export async function obterPedidosPorPeriodo(dias: number = 7): Promise<any[]> {
-  if (!ordersPool) {
+  // Obter o pool de conexão através da função testarConexaoDB
+  const { success, pool } = await testarConexaoDB();
+  if (!success || !pool) {
     throw new Error('Pool de conexão não inicializado');
   }
   
@@ -496,11 +674,11 @@ export async function obterPedidosPorPeriodo(dias: number = 7): Promise<any[]> {
       SELECT 
         DATE(created_at) as data,
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'completo' THEN 1 ELSE 0 END) as completos,
-        SUM(CASE WHEN status = 'falha' THEN 1 ELSE 0 END) as falhas,
-        SUM(price) as valor_total
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completos,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as falhas,
+        SUM(amount) as valor_total
       FROM 
-        orders
+        "Order"
       WHERE 
         created_at >= NOW() - INTERVAL '${dias} days'
       GROUP BY 
@@ -518,47 +696,154 @@ export async function obterPedidosPorPeriodo(dias: number = 7): Promise<any[]> {
   }
 }
 
+// Interface para representar um provedor
+export interface Provedor {
+  id: string;
+  nome: string;
+  descricao?: string;
+  ativo: boolean;
+  logo_url?: string;
+  website?: string;
+  criado_em: Date;
+}
+
 // Função para obter os principais provedores
-export async function obterProvedores(): Promise<any[]> {
+export async function obterProvedores(): Promise<Provedor[]> {
   // Se estiver em build, retornar dados vazios
   if (process.env.NEXT_PHASE === 'phase-production-build') {
     console.log('Pulando busca de provedores durante o build');
     return [];
   }
 
+  const ordersApiUrl = process.env.ORDERS_API_URL;
+  const ordersApiKey = process.env.ORDERS_API_KEY;
+
   try {
     console.log('Iniciando busca de provedores.');
     
-    if (!ordersPool) {
+    // Tentar obter provedores via API
+    if (ordersApiUrl && ordersApiKey) {
+      // Primeiro tentamos o endpoint público
+      try {
+        console.log('Buscando provedores via endpoint público...');
+        const response = await axios.get(`${ordersApiUrl}/providers`, {
+          headers: {
+            'Authorization': `Bearer ${ordersApiKey}`
+          },
+          timeout: 10000
+        });
+
+        // Verificar se a resposta contém dados
+        if (response.data && Array.isArray(response.data)) {
+          console.log(`Provedores encontrados via API pública: ${response.data.length}`);
+          
+          // Mapear os dados da API para o formato esperado
+          return response.data.map((provider: any) => ({
+            id: provider.id,
+            nome: provider.name,
+            descricao: provider.description,
+            ativo: provider.active === true,
+            logo_url: provider.logo_url,
+            website: provider.website,
+            criado_em: new Date(provider.created_at)
+          }));
+        } else if (response.data && response.data.providers && Array.isArray(response.data.providers)) {
+          console.log(`Provedores encontrados via API pública (formato alternativo): ${response.data.providers.length}`);
+          
+          return response.data.providers.map((provider: any) => ({
+            id: provider.id,
+            nome: provider.name,
+            descricao: provider.description,
+            ativo: provider.active === true || provider.status === 'active',
+            logo_url: provider.logo_url,
+            website: provider.website,
+            criado_em: new Date(provider.created_at)
+          }));
+        }
+      } catch (apiError) {
+        console.error('Erro ao obter provedores via endpoint público:', apiError);
+        // Se falhar via API pública, tenta via endpoint admin
+      }
+      
+      // Tentamos o endpoint admin
+      try {
+        console.log('Buscando provedores via endpoint admin...');
+        const response = await axios.get(`${ordersApiUrl}/admin/providers`, {
+          headers: {
+            'Authorization': `Bearer ${ordersApiKey}`
+          },
+          timeout: 10000
+        });
+
+        // Verificar se a resposta contém dados
+        if (response.data && Array.isArray(response.data)) {
+          console.log(`Provedores encontrados via API admin: ${response.data.length}`);
+          
+          // Mapear os dados da API para o formato esperado
+          return response.data.map((provider: any) => ({
+            id: provider.id,
+            nome: provider.name,
+            descricao: provider.description,
+            ativo: provider.active === true,
+            logo_url: provider.logo_url,
+            website: provider.website,
+            criado_em: new Date(provider.created_at)
+          }));
+        }
+      } catch (adminApiError) {
+        console.error('Erro ao obter provedores via endpoint admin:', adminApiError);
+        // Se falhar via API admin, tenta via banco de dados
+      }
+    }
+    
+    // Se não conseguiu via API, tenta via banco de dados
+    console.log('Tentando obter provedores via banco de dados...');
+    
+    // Verificar se a conexão com o banco de dados está disponível
+    const { success, pool } = await testarConexaoDB();
+    if (!success || !pool) {
       throw new Error('Pool de conexão não inicializado');
     }
     
+    // Consulta para buscar provedores
+    // Usando o nome exato da tabela conforme definido no banco de dados
     const query = `
       SELECT 
         id, 
-        name as nome,
-        api_url,
-        status,
-        created_at as data_criacao
+        name as nome, 
+        description as descricao, 
+        active as ativo, 
+        logo_url, 
+        website, 
+        created_at as criado_em
       FROM 
         "Provider"
       WHERE 
-        status = true
+        active = true
       ORDER BY 
-        name
+        name ASC
     `;
     
-    const result = await ordersPool.query(query);
-    console.log(`Provedores encontrados: ${result.rows.length}`);
+    const result = await pool.query(query);
+    console.log(`Encontrados ${result.rows.length} provedores via banco de dados`);
     
-    return result.rows;
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      nome: row.nome,
+      descricao: row.descricao,
+      ativo: row.ativo === true,
+      logo_url: row.logo_url,
+      website: row.website,
+      criado_em: new Date(row.criado_em)
+    }));
   } catch (error) {
-    console.error('Erro ao obter provedores:', error);
+    console.error('Erro ao buscar provedores:', error);
     // Log detalhado do erro
     if (error instanceof Error) {
       console.error(`Mensagem de erro: ${error.message}`);
       console.error(`Stack trace: ${error.stack}`);
     }
-    throw new Error('Erro ao obter provedores');
+    // Se todas as tentativas falharem, retorna uma lista vazia
+    return [];
   }
-} 
+}

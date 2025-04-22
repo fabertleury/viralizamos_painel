@@ -19,12 +19,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!dbUrl) {
       console.error('URL do banco de dados de orders não está configurada');
       
-      // Responder com dados mockados
-      return res.status(200).json({
-        pedidos: gerarPedidosMockados(10),
-        total: 10,
-        mock: true,
-        error: 'URL do banco de dados não configurada'
+      // Responder com erro
+      return res.status(500).json({
+        pedidos: [],
+        total: 0,
+        error: 'URL do banco de dados não configurada. Verifique as variáveis de ambiente.'
       });
     }
 
@@ -33,12 +32,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!conexaoOK) {
       console.error('Não foi possível estabelecer conexão com o banco de dados');
       
-      // Responder com dados mockados
-      return res.status(200).json({
-        pedidos: gerarPedidosMockados(10),
-        total: 10,
-        mock: true,
-        error: 'Falha na conexão com o banco de dados'
+      // Responder com erro
+      return res.status(500).json({
+        pedidos: [],
+        total: 0,
+        error: 'Falha na conexão com o banco de dados. Verifique as credenciais e a conexão de rede.'
       });
     }
 
@@ -91,40 +89,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error(`Stack trace: ${error.stack}`);
     }
     
-    // Responder com dados mockados em caso de erro
-    return res.status(200).json({
-      pedidos: gerarPedidosMockados(10),
-      total: 10,
-      mock: true,
-      error_message: error instanceof Error ? error.message : 'Erro desconhecido'
+    // Responder com erro
+    return res.status(500).json({
+      pedidos: [],
+      total: 0,
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
     });
   }
-}
-
-// Função para gerar pedidos mockados para exibição quando o banco de dados estiver indisponível
-function gerarPedidosMockados(quantidade: number) {
-  const status = ['pendente', 'processando', 'completo', 'falha', 'cancelado', 'parcial'];
-  const provedores = ['Provedor A', 'Provedor B', 'Provedor C'];
-  const produtos = ['Likes Instagram', 'Seguidores Instagram', 'Views TikTok', 'Inscritos YouTube'];
-  
-  return Array.from({ length: quantidade }).map((_, i) => {
-    const dataBase = new Date();
-    dataBase.setDate(dataBase.getDate() - Math.floor(Math.random() * 30));
-    
-    return {
-      id: `mock-${Date.now()}-${i}`,
-      data_criacao: dataBase.toISOString(),
-      provedor_id: `prov-${i % 3}`,
-      provedor_nome: provedores[i % provedores.length],
-      produto_id: `prod-${i % 4}`,
-      produto_nome: produtos[i % produtos.length],
-      quantidade: Math.floor(Math.random() * 1000) + 100,
-      valor: (Math.random() * 100 + 10).toFixed(2),
-      status: status[i % status.length],
-      cliente_id: `client-${i}`,
-      cliente_nome: `Cliente Teste ${i}`,
-      cliente_email: `cliente${i}@teste.com`,
-      is_mock: true
-    };
-  });
 }
