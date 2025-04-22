@@ -32,11 +32,10 @@ async function obterEstatisticasPedidos() {
     const queryAtual = `
       SELECT 
         COUNT(*) as total_pedidos,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as total_completos,
-        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as total_processando,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as total_pendentes,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as total_falhas,
-        SUM(amount) as valor_total
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as pedidos_concluidos,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pedidos_pendentes,
+        SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) as pedidos_cancelados,
+        SUM(amount) as valor_total_pedidos
       FROM "Order"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
@@ -60,15 +59,23 @@ async function obterEstatisticasPedidos() {
     // Calcular crescimento
     const crescimento = calcularCrescimento(totalAtual, totalAnterior);
     
-    // Valor total em reais
-    const valorTotal = parseFloat(dadosAtual.valor_total || '0');
+    // Garantir que valores sejam tratados como números
+    const valorTotal = parseFloat(dadosAtual.valor_total_pedidos || '0');
+    
+    console.log('Estatísticas de pedidos reais:', { 
+      total: totalAtual, 
+      concluidos: parseInt(dadosAtual.pedidos_concluidos || '0'),
+      pendentes: parseInt(dadosAtual.pedidos_pendentes || '0'),
+      cancelados: parseInt(dadosAtual.pedidos_cancelados || '0'),
+      valorTotal,
+      crescimento
+    });
     
     return {
       total: totalAtual,
-      completados: parseInt(dadosAtual.total_completos || '0'),
-      processando: parseInt(dadosAtual.total_processando || '0'),
-      pendentes: parseInt(dadosAtual.total_pendentes || '0'),
-      falhas: parseInt(dadosAtual.total_falhas || '0'),
+      concluidos: parseInt(dadosAtual.pedidos_concluidos || '0'),
+      pendentes: parseInt(dadosAtual.pedidos_pendentes || '0'),
+      cancelados: parseInt(dadosAtual.pedidos_cancelados || '0'),
       valorTotal: valorTotal,
       crescimento
     };
@@ -77,10 +84,9 @@ async function obterEstatisticasPedidos() {
     // Retorna valores padrão em caso de erro
     return {
       total: 0,
-      completados: 0,
-      processando: 0,
+      concluidos: 0,
       pendentes: 0,
-      falhas: 0,
+      cancelados: 0,
       valorTotal: 0,
       crescimento: 0
     };
@@ -120,8 +126,17 @@ async function obterEstatisticasTransacoes() {
     // Calcular crescimento
     const crescimento = calcularCrescimento(totalAtual, totalAnterior);
     
-    // O valor deve ser fornecido como está - já é o valor real em reais
+    // Usar parseFloat para garantir que o valor é tratado como número de ponto flutuante
     const valorTotal = parseFloat(dadosAtual.valor_total_aprovado || '0');
+    
+    console.log('Estatísticas de transações reais:', { 
+      total: totalAtual, 
+      aprovadas: parseInt(dadosAtual.total_aprovadas || '0'),
+      pendentes: parseInt(dadosAtual.total_pendentes || '0'),
+      recusadas: parseInt(dadosAtual.total_recusadas || '0'),
+      valorTotal,
+      crescimento
+    });
     
     return {
       total: totalAtual,
@@ -147,17 +162,20 @@ async function obterEstatisticasTransacoes() {
 
 async function obterEstatisticasUsuarios() {
   try {
+    // Consulta para obter o total de usuários (real)
     const totalQuery = `
       SELECT COUNT(*) as total
       FROM "User"
     `;
     
+    // Consulta para obter usuários novos nos últimos 30 dias (real)
     const novosQuery = `
       SELECT COUNT(*) as novos
       FROM "User"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
+    // Consulta para obter usuários no mês anterior para calcular crescimento
     const mesAnteriorQuery = `
       SELECT COUNT(*) as total_mes_anterior
       FROM "User"
@@ -177,6 +195,8 @@ async function obterEstatisticasUsuarios() {
     // Calcular crescimento
     const crescimento = calcularCrescimento(novos, totalMesAnterior);
     
+    console.log('Estatísticas de usuários reais:', { total, novos, crescimento });
+    
     return {
       total,
       novos,
@@ -184,6 +204,9 @@ async function obterEstatisticasUsuarios() {
     };
   } catch (error) {
     console.error('Erro ao obter estatísticas de usuários:', error);
+    
+    // Apenas em caso de falha na consulta, retornamos zeros
+    // Em ambiente de produção, podemos tentar recuperar dados em cache ou de outro lugar
     return {
       total: 0,
       novos: 0,
@@ -198,8 +221,7 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
       SELECT 
         DATE(created_at) as data,
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completos,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as falhas
+        SUM(amount) as valor_total
       FROM 
         "Order"
       WHERE 
@@ -211,12 +233,17 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
     `;
     
     const result = await ordersPool.query(query);
-    return result.rows.map(row => ({
+    
+    // Garantir que os valores são tratados como números
+    const pedidos = result.rows.map(row => ({
       data: row.data.toISOString().split('T')[0],
       total: parseInt(row.total || '0'),
-      completos: parseInt(row.completos || '0'),
-      falhas: parseInt(row.falhas || '0')
+      valorTotal: parseFloat(row.valor_total || '0')
     }));
+    
+    console.log(`Pedidos por período (${dias} dias):`, pedidos);
+    
+    return pedidos;
   } catch (error) {
     console.error(`Erro ao obter pedidos por período (${dias} dias):`, error);
     return [];
@@ -241,11 +268,17 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
     `;
     
     const result = await pagamentosPool.query(query);
-    return result.rows.map(row => ({
+    
+    // Garantir que estamos tratando os valores como números de ponto flutuante
+    const transacoes = result.rows.map(row => ({
       data: row.data.toISOString().split('T')[0],
       total: parseInt(row.total || '0'),
       valorAprovado: parseFloat(row.valor_aprovado || '0')
     }));
+    
+    console.log(`Transações por período (${dias} dias):`, transacoes);
+    
+    return transacoes;
   } catch (error) {
     console.error(`Erro ao obter transações por período (${dias} dias):`, error);
     return [];
@@ -353,7 +386,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Buscar dados reais de diferentes fontes em paralelo
-    console.log('Buscando dados do dashboard em tempo real...');
+    console.log('Buscando dados do dashboard em tempo real (AMBIENTE DE PRODUÇÃO)...');
     
     const [
       estatisticasPedidos,
@@ -373,12 +406,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Calcular dados para o gráfico de status de pedidos
     const statusPedidos = {
-      labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
+      labels: ['Completos', 'Pendentes', 'Cancelados'],
       dados: [
-        estatisticasPedidos.completados,
-        estatisticasPedidos.processando,
+        estatisticasPedidos.concluidos,
         estatisticasPedidos.pendentes,
-        estatisticasPedidos.falhas
+        estatisticasPedidos.cancelados
       ]
     };
     
@@ -393,9 +425,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         pedidos: {
           total: estatisticasPedidos.total,
           crescimento: estatisticasPedidos.crescimento,
-          completados: estatisticasPedidos.completados,
+          concluidos: estatisticasPedidos.concluidos,
           pendentes: estatisticasPedidos.pendentes,
-          falhas: estatisticasPedidos.falhas
+          cancelados: estatisticasPedidos.cancelados
         },
         usuarios: {
           total: estatisticasUsuarios.total,
