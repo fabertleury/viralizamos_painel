@@ -243,9 +243,9 @@ async function obterEstatisticasUsuarios() {
     `;
     
     const [totalResult, novosResult, mesAnteriorResult] = await Promise.all([
-      ordersPool.query(totalQuery),
-      ordersPool.query(novosQuery),
-      ordersPool.query(mesAnteriorQuery)
+      pagamentosPool.query(totalQuery),
+      pagamentosPool.query(novosQuery),
+      pagamentosPool.query(mesAnteriorQuery)
     ]);
     
     const total = parseInt(totalResult.rows[0].total || '0');
@@ -371,14 +371,12 @@ async function obterAtividadesRecentes(limite: number = 10) {
         'transacao' as tipo,
         t.id,
         t.created_at as data,
-        u.name as usuario,
-        t.description as item,
+        null as usuario,
+        t.payment_request_id as item,
         t.status,
         t.amount as valor
       FROM 
         "transactions" t
-      LEFT JOIN 
-        "users" u ON t.user_id = u.id
       ORDER BY 
         t.created_at DESC
       LIMIT $1
@@ -418,7 +416,7 @@ async function obterAtividadesRecentes(limite: number = 10) {
       id: t.id,
       tipo: t.tipo,
       data: t.data.toISOString(),
-      usuario: t.usuario || 'Não informado',
+      usuario: 'Cliente', // Valor padrão já que não temos join com a tabela de usuários
       item: t.valor ? `R$ ${parseFloat(t.valor).toFixed(2)}` : 'Transação ' + t.id,
       status: mapearStatus(t.status),
       valor: parseFloat(t.valor || '0')
@@ -537,6 +535,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       atividades: atividadesRecentes,
       ultimaAtualizacao: new Date().toISOString()
     };
+
+    console.log('Dados do dashboard estruturados:', {
+      'Transações totais': dashboardData.estatisticas.transacoes.total,
+      'Pedidos totais': dashboardData.estatisticas.pedidos.total,
+      'Usuários totais': dashboardData.estatisticas.usuarios.total,
+      'Receita total': dashboardData.estatisticas.transacoes.valorTotal
+    });
 
     // Retornar os dados do dashboard
     return res.status(200).json(dashboardData);
