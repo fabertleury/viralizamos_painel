@@ -18,7 +18,7 @@ export const ordersApi = axios.create({
 });
 
 // Configurando interceptadores para tokens de autenticação
-const addAuthTokenToRequests = (api: any) => {
+const addAuthTokenToRequests = (api: any, authType = 'Bearer') => {
   api.interceptors.request.use(
     (config: any) => {
       // Em ambiente de navegador, pegamos o token do localStorage
@@ -26,14 +26,18 @@ const addAuthTokenToRequests = (api: any) => {
       if (typeof window !== 'undefined') {
         token = localStorage.getItem('auth_token');
       } else {
-        // Em ambiente de servidor, podemos usar outro mecanismo se necessário
-        token = process.env.API_KEY;
+        // Em ambiente de servidor, dependemos do tipo de API
+        if (authType === 'ApiKey') {
+          token = process.env.PAYMENTS_API_KEY || process.env.API_KEY;
+        } else {
+          token = process.env.ORDERS_API_KEY || process.env.API_KEY;
+        }
       }
       
       if (token) {
         config.headers = {
           ...config.headers,
-          Authorization: `Bearer ${token}`,
+          Authorization: `${authType} ${token}`,
         };
       }
       return config;
@@ -42,9 +46,9 @@ const addAuthTokenToRequests = (api: any) => {
   );
 };
 
-// Aplicando interceptadores
-addAuthTokenToRequests(pagamentosApi);
-addAuthTokenToRequests(ordersApi);
+// Aplicando interceptadores com tipos específicos de auth
+addAuthTokenToRequests(pagamentosApi, 'ApiKey');
+addAuthTokenToRequests(ordersApi, 'Bearer');
 
 // Função geral para tratar erros
 export const handleApiError = (error: any) => {

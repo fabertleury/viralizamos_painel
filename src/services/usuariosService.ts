@@ -731,8 +731,8 @@ export async function buscarUsuarios(filtros: FiltroUsuarios = {}) {
   try {
     console.log('Buscando usuários com filtros:', filtros);
 
-    // Tentar o endpoint /api/admin/users no microserviço de orders
-    const response = await ordersApi.get('/api/admin/users', {
+    // Tentar o endpoint /api/admin/panel-users no microserviço de orders (atualizado)
+    const response = await ordersApi.get('/api/admin/panel-users', {
       params: {
         page: filtros.pagina || 1,
         limit: filtros.limite || 10,
@@ -821,6 +821,44 @@ export async function buscarUsuarios(filtros: FiltroUsuarios = {}) {
       console.error('Erro ao usar endpoint fallback:', fallbackError);
     }
 
+    // Último fallback, tentar a API de pagamentos
+    try {
+      console.log('Tentando buscar usuários diretamente do microserviço de pagamentos');
+      const pagamentosResponse = await pagamentosApi.get('/admin/users', {
+        params: {
+          page: filtros.pagina || 1,
+          limit: filtros.limite || 10,
+          search: filtros.termoBusca || ''
+        }
+      });
+
+      if (pagamentosResponse.data && pagamentosResponse.data.users) {
+        console.log(`Encontrados ${pagamentosResponse.data.users.length} usuários via API de pagamentos`);
+        
+        const usuarios = pagamentosResponse.data.users.map((user: any) => ({
+          id: user.id,
+          nome: user.name || 'Sem nome',
+          email: user.email,
+          telefone: user.phone || '',
+          tipo: user.role || 'cliente',
+          status: user.active || true,
+          data_cadastro: new Date(user.created_at),
+          ultimo_acesso: user.last_login ? new Date(user.last_login) : null,
+          foto_perfil: null
+        }));
+
+        return {
+          usuarios,
+          total: pagamentosResponse.data.total || usuarios.length,
+          pagina: pagamentosResponse.data.page || 1, 
+          limite: pagamentosResponse.data.limit || 10,
+          paginas: pagamentosResponse.data.totalPages || 1
+        };
+      }
+    } catch (pagamentosError) {
+      console.error('Erro ao buscar usuários via API de pagamentos:', pagamentosError);
+    }
+
     return { usuarios: [], total: 0, pagina: 1, limite: 10, paginas: 0 };
   } catch (error) {
     console.error('Erro ao buscar usuários:', error);
@@ -834,42 +872,34 @@ export async function buscarUsuario(id: string) {
   try {
     console.log(`Buscando detalhes do usuário ${id}`);
     
-    // Buscar detalhes do usuário na API de orders usando o endpoint correto
-    const response = await ordersApi.get(`/api/admin/users/${id}`);
-    
-    if (response.data && response.data.user) {
-      const user = response.data.user;
+    // Tentar o endpoint atualizado no microserviço de orders
+    try {
+      console.log(`Tentando endpoint /api/admin/panel-users/${id}`);
+      const response = await ordersApi.get(`/api/admin/panel-users/${id}`);
       
-      // Buscar métricas adicionais
-      let metricas = null;
-      try {
-        const metricasResponse = await ordersApi.get(`/api/admin/users/${id}/metrics`);
-        metricas = metricasResponse.data?.metrics || {};
-      } catch (metricasError) {
-        console.error(`Erro ao buscar métricas para usuário ${id}:`, metricasError);
-        metricas = {};
+      if (response.data && response.data.user) {
+        const user = response.data.user;
+        const metrics = user.metrics || {};
+        
+        return {
+          id: user.id,
+          nome: user.name || 'Sem nome',
+          email: user.email,
+          telefone: user.phone || '',
+          tipo: user.role || 'cliente',
+          status: true,
+          data_cadastro: new Date(user.created_at),
+          ultimo_acesso: user.updated_at ? new Date(user.updated_at) : null,
+          foto_perfil: null,
+          // Métricas detalhadas
+          total_pedidos: metrics.orders_count || 0,
+          total_gasto: metrics.total_spent || 0,
+          ultimo_pedido: metrics.last_purchase ? new Date(metrics.last_purchase.date) : null
+        };
       }
-      
-      return {
-        id: user.id,
-        nome: user.name || 'Sem nome',
-        email: user.email,
-        telefone: user.phone || '',
-        tipo: user.role || 'cliente',
-        status: true,
-        data_cadastro: new Date(user.created_at),
-        ultimo_acesso: user.updated_at ? new Date(user.updated_at) : null,
-        foto_perfil: null,
-        // Métricas básicas
-        total_pedidos: user.orders_count || 0,
-        total_gasto: user.total_spent || 0,
-        ultimo_pedido: user.last_purchase ? new Date(user.last_purchase) : null,
-        servicos_usados: user.favorite_service ? [user.favorite_service] : [],
-        // Métricas adicionais
-        pedidos_recentes: [],
-        frequencia_compra: metricas.avg_days_between_purchases ? `${Math.round(metricas.avg_days_between_purchases)} dias` : null,
-        valor_medio_compra: metricas.avg_order_value || 0
-      };
+    } catch (error) {
+      console.error(`Erro ao buscar usuário ${id} via novo endpoint:`, error);
+      // Continuar para o próximo fallback
     }
     
     // Tentar o endpoint antigo como fallback
@@ -896,13 +926,37 @@ export async function buscarUsuario(id: string) {
       console.error(`Erro ao usar endpoint fallback para usuário ${id}:`, fallbackError);
     }
     
+    // Último fallback: tentar a API de pagamentos
+    try {
+      console.log(`Tentando buscar usuário ${id} na API de pagamentos`);
+      const pagamentosResponse = await pagamentosApi.get(`/admin/users/${id}`);
+      
+      if (pagamentosResponse.data) {
+        const user = pagamentosResponse.data;
+        
+        return {
+          id: user.id,
+          nome: user.name || 'Sem nome',
+          email: user.email,
+          telefone: user.phone || '',
+          tipo: user.role || 'cliente',
+          status: user.active || true,
+          data_cadastro: new Date(user.created_at),
+          ultimo_acesso: user.last_login ? new Date(user.last_login) : null,
+          foto_perfil: null
+        };
+      }
+    } catch (pagamentosError) {
+      console.error(`Erro ao buscar usuário ${id} na API de pagamentos:`, pagamentosError);
+    }
+    
     return null;
   } catch (error) {
     console.error(`Erro ao buscar detalhes do usuário ${id}:`, error);
     handleApiError(error);
     return null;
   }
-};
+}
 
 // Atualizar dados do usuário
 export const atualizarUsuario = async (id: string, dados: Partial<Usuario>) => {
@@ -921,24 +975,30 @@ export async function buscarMetricasUsuario(id: string) {
   try {
     console.log(`Buscando métricas do usuário ${id}`);
     
-    // Buscar métricas do usuário na API de orders usando o endpoint correto
-    const response = await ordersApi.get(`/api/admin/users/${id}/metrics`);
-    
-    if (response.data && response.data.metrics) {
-      const metrics = response.data.metrics;
+    // Tentar a rota atualizada primeiro
+    try {
+      console.log(`Tentando endpoint /api/admin/panel-users/${id}/metrics`);
+      const response = await ordersApi.get(`/api/admin/panel-users/${id}/metrics`);
       
-      return {
-        total_gasto: metrics.total_spent || 0,
-        quantidade_compras: metrics.orders_count || 0,
-        ultima_compra: metrics.last_purchase ? new Date(metrics.last_purchase) : undefined,
-        servico_mais_comprado: metrics.favorite_service ? {
-          nome: metrics.favorite_service,
-          quantidade: metrics.favorite_service_count || 0
-        } : undefined,
-        compras_recentes: metrics.recent_orders || [],
-        media_mensal: metrics.monthly_average || 0,
-        primeiro_pedido: metrics.first_order ? new Date(metrics.first_order) : undefined
-      };
+      if (response.data && response.data.metrics) {
+        const metrics = response.data.metrics;
+        
+        return {
+          total_gasto: metrics.total_spent || 0,
+          quantidade_compras: metrics.orders_count || 0,
+          ultima_compra: metrics.last_purchase ? new Date(metrics.last_purchase.date) : undefined,
+          servico_mais_comprado: metrics.top_services && metrics.top_services.length > 0 ? {
+            nome: metrics.top_services[0].service_name,
+            quantidade: metrics.top_services[0].count || 0
+          } : undefined,
+          compras_recentes: metrics.recent_orders || [],
+          media_mensal: metrics.monthly_average || metrics.avg_order_value || 0,
+          primeiro_pedido: metrics.first_order ? new Date(metrics.first_order) : undefined
+        };
+      }
+    } catch (error) {
+      console.error(`Erro ao buscar métricas pela rota atualizada para usuário ${id}:`, error);
+      // Continuar para o fallback
     }
     
     // Tentar o endpoint antigo como fallback
@@ -977,10 +1037,36 @@ export async function buscarMetricasUsuario(id: string) {
 // Buscar histórico de compras do usuário
 export async function buscarHistoricoCompras(id: string, pagina = 1, limite = 10) {
   try {
-    const response = await ordersApi.get(`/admin/users/${id}/orders`, {
+    // Tentar a rota atualizada primeiro
+    try {
+      console.log(`Tentando buscar histórico de compras via /api/admin/panel-users/${id}/orders`);
+      const response = await ordersApi.get(`/api/admin/panel-users/${id}/orders`, {
+        params: { page: pagina, limit: limite }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Erro ao buscar histórico de compras pela rota atualizada:`, error);
+      // Continuar para o fallback
+    }
+    
+    // Tentar a rota alternativa
+    try {
+      console.log(`Tentando buscar histórico de compras via /api/admin/users/${id}/orders`);
+      const response = await ordersApi.get(`/api/admin/users/${id}/orders`, {
+        params: { page: pagina, limit: limite }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Erro ao buscar histórico de compras pela rota alternativa:`, error);
+      // Último fallback
+    }
+    
+    // Último fallback - rota sem /api/
+    console.log(`Tentando buscar histórico via fallback /admin/users/${id}/orders`);
+    const fallbackResponse = await ordersApi.get(`/admin/users/${id}/orders`, {
       params: { page: pagina, limit: limite }
     });
-    return response.data;
+    return fallbackResponse.data;
   } catch (error) {
     console.error(`Erro ao buscar histórico de compras do usuário ${id}:`, error);
     handleApiError(error);
