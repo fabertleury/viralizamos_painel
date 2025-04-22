@@ -731,8 +731,8 @@ export async function buscarUsuarios(filtros: FiltroUsuarios = {}) {
   try {
     console.log('Buscando usuários com filtros:', filtros);
 
-    // Usar o novo endpoint panel-users para buscar usuários com métricas detalhadas
-    const response = await ordersApi.get('/admin/panel-users', {
+    // Usar o endpoint existente /admin/users enquanto o novo endpoint não está disponível em produção
+    const response = await ordersApi.get('/admin/users', {
       params: {
         page: filtros.pagina || 1,
         limit: filtros.limite || 10,
@@ -834,8 +834,8 @@ export async function buscarUsuario(id: string) {
   try {
     console.log(`Buscando detalhes do usuário ${id}`);
     
-    // Buscar detalhes do usuário na API de orders usando o novo endpoint
-    const response = await ordersApi.get(`/admin/panel-users/${id}`);
+    // Buscar detalhes do usuário na API de orders usando o endpoint existente
+    const response = await ordersApi.get(`/admin/users/${id}`);
     
     if (response.data && response.data.user) {
       const user = response.data.user;
@@ -913,11 +913,11 @@ export async function buscarMetricasUsuario(id: string) {
   try {
     console.log(`Buscando métricas do usuário ${id}`);
     
-    // Buscar métricas do usuário na API de orders usando o novo endpoint
-    const response = await ordersApi.get(`/admin/panel-users/${id}`);
+    // Buscar métricas do usuário na API de orders usando o endpoint existente
+    const response = await ordersApi.get(`/admin/users/${id}/metrics`);
     
-    if (response.data && response.data.user && response.data.user.metrics) {
-      const metrics = response.data.user.metrics;
+    if (response.data && response.data.metrics) {
+      const metrics = response.data.metrics;
       
       return {
         total_gasto: metrics.total_spent || 0,

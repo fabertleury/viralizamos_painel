@@ -37,31 +37,28 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 
-// Corrigido: importação desacoplada para evitar problemas no build
+// Importar o serviço de usuários
+import { buscarUsuarios as buscarUsuariosService } from '../services/usuariosService';
+
+// Função para buscar usuários detalhados
 const buscarUsuariosDetalhados = async (filtros: any, pagina: number, limite: number) => {
   try {
-    const queryParams = new URLSearchParams();
+    console.log('Buscando usuários com filtros:', filtros, 'página:', pagina, 'limite:', limite);
     
-    if (filtros.tipo) queryParams.append('tipo', filtros.tipo);
-    if (filtros.status) queryParams.append('status', filtros.status);
-    if (filtros.termoBusca) queryParams.append('termoBusca', filtros.termoBusca);
+    // Usar o serviço de usuários diretamente
+    const resultado = await buscarUsuariosService({
+      tipo: filtros.tipo,
+      status: filtros.status,
+      termoBusca: filtros.termoBusca,
+      pagina: pagina,
+      limite: limite
+    });
     
-    queryParams.append('pagina', pagina.toString());
-    queryParams.append('limite', limite.toString());
-    
-    console.log(`Buscando usuários: /api/usuarios?${queryParams.toString()}`);
-    const response = await fetch(`/api/usuarios?${queryParams.toString()}`);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Erro na resposta da API:', errorData);
-      throw new Error(errorData.message || 'Erro ao buscar usuários');
-    }
-    
-    return await response.json();
+    console.log('Resultado da busca de usuários:', resultado);
+    return resultado;
   } catch (error) {
     console.error('Erro ao buscar usuários:', error);
-    return { usuarios: [], total: 0 };
+    return { usuarios: [], total: 0, pagina: 1, limite: 10, paginas: 0 };
   }
 };
 
