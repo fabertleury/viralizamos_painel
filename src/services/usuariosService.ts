@@ -839,7 +839,16 @@ export async function buscarUsuario(id: string) {
     
     if (response.data && response.data.user) {
       const user = response.data.user;
-      const metrics = user.metrics || {};
+      
+      // Buscar métricas adicionais
+      let metricas = null;
+      try {
+        const metricasResponse = await ordersApi.get(`/admin/users/${id}/metrics`);
+        metricas = metricasResponse.data?.metrics || {};
+      } catch (metricasError) {
+        console.error(`Erro ao buscar métricas para usuário ${id}:`, metricasError);
+        metricas = {};
+      }
       
       return {
         id: user.id,
@@ -851,16 +860,15 @@ export async function buscarUsuario(id: string) {
         data_cadastro: new Date(user.created_at),
         ultimo_acesso: user.updated_at ? new Date(user.updated_at) : null,
         foto_perfil: null,
-        // Métricas detalhadas
-        total_pedidos: metrics.total_orders || 0,
-        total_gasto: metrics.total_spent || 0,
-        ultimo_pedido: metrics.last_purchase ? new Date(metrics.last_purchase.date) : null,
-        servicos_usados: metrics.top_services ? metrics.top_services.map((s: any) => s.service_name) : [],
-        pedidos_recentes: user.recent_orders || [],
-        distribuicao_status: metrics.status_distribution || [],
-        tendencia_compras: metrics.purchase_trend || [],
-        valor_medio_compra: metrics.avg_order_value || 0,
-        dias_entre_compras: metrics.avg_days_between_purchases || null
+        // Métricas básicas
+        total_pedidos: user.orders_count || 0,
+        total_gasto: user.total_spent || 0,
+        ultimo_pedido: user.last_purchase ? new Date(user.last_purchase) : null,
+        servicos_usados: user.favorite_service ? [user.favorite_service] : [],
+        // Métricas adicionais
+        pedidos_recentes: [],
+        frequencia_compra: metricas.avg_days_between_purchases ? `${Math.round(metricas.avg_days_between_purchases)} dias` : null,
+        valor_medio_compra: metricas.avg_order_value || 0
       };
     }
     
@@ -921,21 +929,15 @@ export async function buscarMetricasUsuario(id: string) {
       
       return {
         total_gasto: metrics.total_spent || 0,
-        quantidade_compras: metrics.total_orders || 0,
-        ultima_compra: metrics.last_purchase ? new Date(metrics.last_purchase.date) : undefined,
-        servico_mais_comprado: metrics.top_services && metrics.top_services.length > 0 ? {
-          nome: metrics.top_services[0].service_name,
-          quantidade: metrics.top_services[0].count || 0
+        quantidade_compras: metrics.orders_count || 0,
+        ultima_compra: metrics.last_purchase ? new Date(metrics.last_purchase) : undefined,
+        servico_mais_comprado: metrics.favorite_service ? {
+          nome: metrics.favorite_service,
+          quantidade: metrics.favorite_service_count || 0
         } : undefined,
-        compras_recentes: response.data.user.recent_orders || [],
-        media_mensal: metrics.purchase_trend && metrics.purchase_trend.length > 0 ? 
-          metrics.purchase_trend.reduce((sum: number, month: any) => sum + month.total_amount, 0) / metrics.purchase_trend.length : 0,
-        primeiro_pedido: response.data.user.recent_orders && response.data.user.recent_orders.length > 0 ? 
-          new Date(response.data.user.recent_orders[response.data.user.recent_orders.length - 1].created_at) : undefined,
-        distribuicao_status: metrics.status_distribution || [],
-        tendencia_compras: metrics.purchase_trend || [],
-        valor_medio_compra: metrics.avg_order_value || 0,
-        dias_entre_compras: metrics.avg_days_between_purchases || null
+        compras_recentes: metrics.recent_orders || [],
+        media_mensal: metrics.monthly_average || 0,
+        primeiro_pedido: metrics.first_order ? new Date(metrics.first_order) : undefined
       };
     }
     
