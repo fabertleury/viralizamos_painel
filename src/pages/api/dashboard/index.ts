@@ -96,14 +96,14 @@ async function obterEstatisticasPedidos() {
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pedidos_pendentes,
         SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) as pedidos_cancelados,
         SUM(amount) as valor_total_pedidos
-      FROM "Order"
+      FROM "orders"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
     // Dados do mês anterior
     const queryAnterior = `
       SELECT COUNT(*) as total_mes_anterior
-      FROM "Order"
+      FROM "orders"
       WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
     `;
     
@@ -141,14 +141,14 @@ async function obterEstatisticasPedidos() {
     };
   } catch (error) {
     console.error('Erro ao obter estatísticas de pedidos:', error);
-    // Retorna valores padrão em caso de erro
+    // Retorna valores zero em caso de erro
     return {
-      total: 51,
-      concluidos: 45,
-      pendentes: 5,
-      cancelados: 1,
-      valorTotal: 15000,
-      crescimento: 100
+      total: 0,
+      concluidos: 0,
+      pendentes: 0,
+      cancelados: 0,
+      valorTotal: 0,
+      crescimento: 0
     };
   }
 }
@@ -163,14 +163,14 @@ async function obterEstatisticasTransacoes() {
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as total_pendentes,
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as total_recusadas,
         SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_total_aprovado
-      FROM "Transaction"
+      FROM "transactions"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
     // Dados do mês anterior
     const queryAnterior = `
       SELECT COUNT(*) as total_mes_anterior
-      FROM "Transaction"
+      FROM "transactions"
       WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
     `;
     
@@ -208,14 +208,14 @@ async function obterEstatisticasTransacoes() {
     };
   } catch (error) {
     console.error('Erro ao obter estatísticas de transações:', error);
-    // Retorna valores padrão em caso de erro
+    // Retorna valores zero em caso de erro
     return {
-      total: 60,
-      aprovadas: 50,
-      pendentes: 8,
-      recusadas: 2,
-      valorTotal: 22000,
-      crescimento: 80
+      total: 0,
+      aprovadas: 0,
+      pendentes: 0,
+      recusadas: 0,
+      valorTotal: 0,
+      crescimento: 0
     };
   }
 }
@@ -225,20 +225,20 @@ async function obterEstatisticasUsuarios() {
     // Consulta para obter o total de usuários (real)
     const totalQuery = `
       SELECT COUNT(*) as total
-      FROM "User"
+      FROM "users"
     `;
     
     // Consulta para obter usuários novos nos últimos 30 dias (real)
     const novosQuery = `
       SELECT COUNT(*) as novos
-      FROM "User"
+      FROM "users"
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `;
     
     // Consulta para obter usuários no mês anterior para calcular crescimento
     const mesAnteriorQuery = `
       SELECT COUNT(*) as total_mes_anterior
-      FROM "User"
+      FROM "users"
       WHERE created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'
     `;
     
@@ -265,12 +265,11 @@ async function obterEstatisticasUsuarios() {
   } catch (error) {
     console.error('Erro ao obter estatísticas de usuários:', error);
     
-    // Apenas em caso de falha na consulta, retornamos zeros
-    // Em ambiente de produção, podemos tentar recuperar dados em cache ou de outro lugar
+    // Retorna valores zero em caso de erro
     return {
-      total: 35,
-      novos: 15,
-      crescimento: 100
+      total: 0,
+      novos: 0,
+      crescimento: 0
     };
   }
 }
@@ -283,7 +282,7 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
         COUNT(*) as total,
         SUM(amount) as valor_total
       FROM 
-        "Order"
+        "orders"
       WHERE 
         created_at >= NOW() - INTERVAL '${dias} days'
       GROUP BY 
@@ -306,11 +305,7 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
     return pedidos;
   } catch (error) {
     console.error(`Erro ao obter pedidos por período (${dias} dias):`, error);
-    return Array.from({ length: 7 }, (_, i) => ({
-      data: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      total: Math.floor(Math.random() * 10) + 1,
-      valorTotal: Math.floor(Math.random() * 3000) + 500
-    }));
+    return [];
   }
 }
 
@@ -322,7 +317,7 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
         COUNT(*) as total,
         SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_aprovado
       FROM 
-        "Transaction"
+        "transactions"
       WHERE 
         created_at >= NOW() - INTERVAL '${dias} days'
       GROUP BY 
@@ -345,11 +340,7 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
     return transacoes;
   } catch (error) {
     console.error(`Erro ao obter transações por período (${dias} dias):`, error);
-    return Array.from({ length: 7 }, (_, i) => ({
-      data: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      total: Math.floor(Math.random() * 10) + 1,
-      valorAprovado: Math.floor(Math.random() * 5000) + 1000
-    }));
+    return [];
   }
 }
 
@@ -362,13 +353,13 @@ async function obterAtividadesRecentes(limite: number = 10) {
         o.id,
         o.created_at as data,
         u.name as usuario,
-        o.service_name as item,
+        o.service_id as item,
         o.status,
         o.amount as valor
       FROM 
-        "Order" o
+        "orders" o
       LEFT JOIN 
-        "User" u ON o.user_id = u.id
+        "users" u ON o.user_id = u.id
       ORDER BY 
         o.created_at DESC
       LIMIT $1
@@ -385,9 +376,9 @@ async function obterAtividadesRecentes(limite: number = 10) {
         t.status,
         t.amount as valor
       FROM 
-        "Transaction" t
+        "transactions" t
       LEFT JOIN 
-        "User" u ON t.user_id = u.id
+        "users" u ON t.user_id = u.id
       ORDER BY 
         t.created_at DESC
       LIMIT $1
@@ -417,7 +408,7 @@ async function obterAtividadesRecentes(limite: number = 10) {
       tipo: p.tipo,
       data: p.data.toISOString(),
       usuario: p.usuario || 'Não informado',
-      item: p.item || 'Pedido ' + p.id,
+      item: `Serviço #${p.item}` || 'Pedido ' + p.id,
       status: mapearStatus(p.status),
       valor: parseFloat(p.valor || '0')
     }));
@@ -467,48 +458,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       obterEstatisticasPedidos().catch(error => {
         console.error("Erro ao obter estatísticas de pedidos:", error);
         return {
-          total: 51,
-          concluidos: 45,
-          pendentes: 5,
-          cancelados: 1,
-          valorTotal: 15000,
-          crescimento: 100
+          total: 0,
+          concluidos: 0,
+          pendentes: 0,
+          cancelados: 0,
+          valorTotal: 0,
+          crescimento: 0
         };
       }),
       obterEstatisticasTransacoes().catch(error => {
         console.error("Erro ao obter estatísticas de transações:", error);
         return {
-          total: 60,
-          aprovadas: 50,
-          pendentes: 8,
-          recusadas: 2,
-          valorTotal: 22000,
-          crescimento: 80
+          total: 0,
+          aprovadas: 0,
+          pendentes: 0,
+          recusadas: 0,
+          valorTotal: 0,
+          crescimento: 0
         };
       }),
       obterEstatisticasUsuarios().catch(error => {
         console.error("Erro ao obter estatísticas de usuários:", error);
         return {
-          total: 35,
-          novos: 15,
-          crescimento: 100
+          total: 0,
+          novos: 0,
+          crescimento: 0
         };
       }),
       obterTransacoesPorPeriodo(7).catch(error => {
         console.error("Erro ao obter transações por período:", error);
-        return Array.from({ length: 7 }, (_, i) => ({
-          data: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          total: Math.floor(Math.random() * 10) + 1,
-          valorAprovado: Math.floor(Math.random() * 5000) + 1000
-        }));
+        return [];
       }),
       obterPedidosPorPeriodo(7).catch(error => {
         console.error("Erro ao obter pedidos por período:", error);
-        return Array.from({ length: 7 }, (_, i) => ({
-          data: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          total: Math.floor(Math.random() * 10) + 1,
-          valorTotal: Math.floor(Math.random() * 3000) + 500
-        }));
+        return [];
       }),
       obterAtividadesRecentes(10).catch(error => {
         console.error("Erro ao obter atividades recentes:", error);
@@ -517,7 +500,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ]);
     
     // Calcular dados para o gráfico de status de pedidos
-    const statusPedidos = {
+    const grafico = {
       labels: ['Completos', 'Pendentes', 'Cancelados'],
       dados: [
         estatisticasPedidos.concluidos,
@@ -549,7 +532,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
       graficos: {
         transacoesPorDia,
-        statusPedidos
+        grafico
       },
       atividades: atividadesRecentes,
       ultimaAtualizacao: new Date().toISOString()
