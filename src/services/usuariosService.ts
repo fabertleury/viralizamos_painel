@@ -824,7 +824,7 @@ export async function buscarUsuarios(filtros: FiltroUsuarios = {}) {
     // Último fallback, tentar a API de pagamentos
     try {
       console.log('Tentando buscar usuários diretamente do microserviço de pagamentos');
-      const pagamentosResponse = await pagamentosApi.get('/admin/users', {
+      const pagamentosResponse = await pagamentosApi.get('/api/admin/users', {
         params: {
           page: filtros.pagina || 1,
           limit: filtros.limite || 10,
@@ -929,7 +929,7 @@ export async function buscarUsuario(id: string) {
     // Último fallback: tentar a API de pagamentos
     try {
       console.log(`Tentando buscar usuário ${id} na API de pagamentos`);
-      const pagamentosResponse = await pagamentosApi.get(`/admin/users/${id}`);
+      const pagamentosResponse = await pagamentosApi.get(`/api/admin/users/${id}`);
       
       if (pagamentosResponse.data) {
         const user = pagamentosResponse.data;
@@ -1062,8 +1062,8 @@ export async function buscarHistoricoCompras(id: string, pagina = 1, limite = 10
     }
     
     // Último fallback - rota sem /api/
-    console.log(`Tentando buscar histórico via fallback /admin/users/${id}/orders`);
-    const fallbackResponse = await ordersApi.get(`/admin/users/${id}/orders`, {
+    console.log(`Tentando buscar histórico via fallback /api/admin/users/${id}/orders`);
+    const fallbackResponse = await ordersApi.get(`/api/admin/users/${id}/orders`, {
       params: { page: pagina, limit: limite }
     });
     return fallbackResponse.data;

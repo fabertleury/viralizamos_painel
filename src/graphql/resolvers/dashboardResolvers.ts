@@ -29,7 +29,7 @@ async function obterEstatisticasPedidos() {
   try {
     console.log('[API:Dashboard] Buscando estatísticas de pedidos');
     
-    const response = await ordersApi.get('/stats/overview', {
+    const response = await ordersApi.get('/api/stats/overview', {
       params: {
         period: 30
       }
@@ -68,7 +68,7 @@ async function obterEstatisticasTransacoes() {
   try {
     console.log('[API:Dashboard] Buscando estatísticas de transações');
     
-    const response = await pagamentosApi.get('/stats/transactions', {
+    const response = await pagamentosApi.get('/api/stats/transactions', {
       params: {
         period: 30
       }
@@ -105,7 +105,7 @@ async function obterEstatisticasUsuarios() {
   try {
     console.log('[API:Dashboard] Buscando estatísticas de usuários');
     
-    const response = await pagamentosApi.get('/stats/users', {
+    const response = await pagamentosApi.get('/api/stats/users', {
       headers: {
         'Authorization': `ApiKey ${process.env.PAGAMENTOS_API_KEY}`
       }
@@ -138,7 +138,7 @@ async function obterTransacoesPorPeriodo(dias = 7) {
   try {
     console.log(`[API:Dashboard] Buscando transações por período (${dias} dias)`);
     
-    const response = await pagamentosApi.get('/stats/transactions/daily', {
+    const response = await pagamentosApi.get('/api/stats/transactions/daily', {
       params: {
         days: dias
       }
@@ -163,7 +163,7 @@ async function obterPedidosPorPeriodo(dias = 7) {
   try {
     console.log(`[API:Dashboard] Buscando pedidos por período (${dias} dias)`);
     
-    const response = await ordersApi.get('/stats/orders/daily', {
+    const response = await ordersApi.get('/api/stats/orders/daily', {
       params: {
         days: dias
       }

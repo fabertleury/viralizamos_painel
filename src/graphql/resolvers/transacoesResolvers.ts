@@ -61,7 +61,7 @@ export const transacoesResolvers = {
         console.log(`[API:Transacoes] Tentando API REST: ${pagamentosApi.defaults.baseURL}/transactions/list`);
         
         // Chamar a API de transações
-        const response = await pagamentosApi.get('/transactions/list', { params });
+        const response = await pagamentosApi.get('/api/transactions/list', { params });
         
         const transactions = response.data.transactions || [];
         const total = response.data.total || 0;
@@ -96,7 +96,7 @@ export const transacoesResolvers = {
         console.log(`[API:Transacao] Tentando buscar transação ${id} via API REST`);
         
         // Buscar transação por ID
-        const response = await pagamentosApi.get(`/transactions/${id}`);
+        const response = await pagamentosApi.get(`/api/transactions/${id}`);
         
         if (!response.data || response.data.error) {
           return null;

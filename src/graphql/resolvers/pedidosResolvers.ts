@@ -58,10 +58,10 @@ export const pedidosResolvers = {
           }
         }
         
-        console.log(`[API:Pedidos] Tentando API REST: ${ordersApi.defaults.baseURL}/orders/list`);
+        console.log(`[API:Pedidos] Tentando API REST: ${ordersApi.defaults.baseURL}/api/orders/list`);
         
         // Chamar a API de pedidos
-        const response = await ordersApi.get('/orders/list', { params });
+        const response = await ordersApi.get('/api/orders/list', { params });
         
         const orders = response.data.orders || [];
         const total = response.data.total || 0;
@@ -102,7 +102,7 @@ export const pedidosResolvers = {
         console.log(`[API:Pedido] Tentando buscar pedido ${id} via API REST`);
         
         // Buscar pedido por ID
-        const response = await ordersApi.get(`/orders/${id}`);
+        const response = await ordersApi.get(`/api/orders/${id}`);
         
         if (!response.data || response.data.error) {
           return null;
@@ -138,10 +138,10 @@ export const pedidosResolvers = {
     
     provedores: async () => {
       try {
-        console.log(`[API:Provedores] Tentando API REST: ${ordersApi.defaults.baseURL}/providers/list`);
+        console.log(`[API:Provedores] Tentando API REST: ${ordersApi.defaults.baseURL}/api/providers/list`);
         
         // Buscar lista de provedores
-        const response = await ordersApi.get('/providers/list');
+        const response = await ordersApi.get('/api/providers/list');
         
         const providers = response.data || [];
         
@@ -163,10 +163,10 @@ export const pedidosResolvers = {
   Mutation: {
     reenviarPedido: async (_: any, { id }: { id: string }) => {
       try {
-        console.log(`[API:ReenviarPedido] Tentando API REST: ${ordersApi.defaults.baseURL}/orders/${id}/retry`);
+        console.log(`[API:ReenviarPedido] Tentando API REST: ${ordersApi.defaults.baseURL}/api/orders/${id}/retry`);
         
         // Chamar API para reenviar pedido
-        const response = await ordersApi.post(`/orders/${id}/retry`);
+        const response = await ordersApi.post(`/api/orders/${id}/retry`);
         
         if (response.data.error) {
           return {

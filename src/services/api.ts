@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Criando instâncias do Axios para cada microserviço
 export const pagamentosApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api',
+  baseURL: process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -10,7 +10,7 @@ export const pagamentosApi = axios.create({
 });
 
 export const ordersApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com/api',
+  baseURL: process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
