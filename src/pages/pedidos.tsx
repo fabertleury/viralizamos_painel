@@ -57,6 +57,7 @@ interface Pedido {
   api_response?: any;
   error_message?: string;
   last_check?: Date;
+  service_name?: string;
 }
 
 export default function Pedidos() {
@@ -248,9 +249,10 @@ export default function Pedidos() {
       }
     } catch (error) {
       console.error(`Erro ao reenviar pedido ${pedidoParaReenviar}:`, error);
+      
       toast({
-        title: 'Erro ao reenviar pedido',
-        description: 'Ocorreu um erro ao reenviar o pedido. Tente novamente mais tarde.',
+        title: 'Falha ao reenviar pedido',
+        description: 'Ocorreu um erro ao tentar reenviar o pedido.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -258,6 +260,46 @@ export default function Pedidos() {
     } finally {
       setIsReenviando(false);
       fecharDialogo();
+    }
+  };
+  
+  // Função para atualizar o status de um pedido
+  const atualizarStatus = async (id: string, novoStatus: string) => {
+    try {
+      const response = await axios.put(`/api/pedidos/${id}/status`, {
+        status: novoStatus
+      });
+      
+      if (response.data.success) {
+        toast({
+          title: 'Status atualizado',
+          description: `O pedido foi marcado como ${novoStatus}.`,
+          status: 'success',
+          duration: 5000,
+          isClosable: true,
+        });
+        
+        // Atualizar a lista de pedidos
+        carregarPedidos();
+      } else {
+        toast({
+          title: 'Falha ao atualizar status',
+          description: response.data.message || 'Não foi possível atualizar o status do pedido.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error(`Erro ao atualizar status do pedido ${id}:`, error);
+      
+      toast({
+        title: 'Falha ao atualizar status',
+        description: 'Ocorreu um erro ao tentar atualizar o status do pedido.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
     }
   };
   
@@ -467,7 +509,7 @@ export default function Pedidos() {
                 <Th isNumeric>Qtd</Th>
                 <Th isNumeric>Valor</Th>
                 <Th>Status</Th>
-                <Th width="80px">Ações</Th>
+                <Th width="120px">Ações</Th>
               </Tr>
             </Thead>
             <Tbody>
@@ -484,37 +526,55 @@ export default function Pedidos() {
                     <Td fontFamily="mono">{pedido.id}</Td>
                     <Td>{formatarData(pedido.data_criacao)}</Td>
                     <Td>{pedido.cliente_nome || pedido.cliente_id}</Td>
-                    <Td>{pedido.produto_nome}</Td>
+                    <Td>{pedido.service_name || pedido.produto_nome}</Td>
                     <Td>{pedido.provedor_nome}</Td>
                     <Td isNumeric>{pedido.quantidade.toLocaleString()}</Td>
                     <Td isNumeric>{formatarValor(pedido.valor)}</Td>
                     <Td>{renderStatus(pedido.status)}</Td>
                     <Td>
-                      <Menu>
-                        <MenuButton
-                          as={IconButton}
-                          aria-label="Opções"
-                          icon={<FiMoreVertical />}
-                          variant="ghost"
+                      <HStack spacing={1}>
+                        <IconButton
+                          aria-label="Ver detalhes"
+                          icon={<FiEye />}
                           size="sm"
+                          variant="ghost"
+                          onClick={() => verDetalhesPedido(pedido.id)}
                         />
-                        <MenuList>
-                          <MenuItem 
-                            icon={<FiEye />}
-                            onClick={() => verDetalhesPedido(pedido.id)}
-                          >
-                            Ver detalhes
-                          </MenuItem>
-                          {(pedido.status === 'falha' || pedido.status === 'pendente') && (
-                            <MenuItem 
-                              icon={<FiRefreshCw />}
-                              onClick={() => confirmarReenvio(pedido.id)}
-                            >
-                              Reenviar
+                        <IconButton
+                          aria-label="Enviar manualmente"
+                          icon={<FiRefreshCw />}
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => confirmarReenvio(pedido.id)}
+                          isDisabled={!['falha', 'pendente'].includes(pedido.status)}
+                        />
+                        <Menu>
+                          <MenuButton
+                            as={IconButton}
+                            aria-label="Atualizar Status"
+                            icon={<FiMoreVertical />}
+                            variant="ghost"
+                            size="sm"
+                          />
+                          <MenuList>
+                            <MenuItem onClick={() => atualizarStatus(pedido.id, 'pendente')}>
+                              Marcar como Pendente
                             </MenuItem>
-                          )}
-                        </MenuList>
-                      </Menu>
+                            <MenuItem onClick={() => atualizarStatus(pedido.id, 'processando')}>
+                              Marcar como Processando
+                            </MenuItem>
+                            <MenuItem onClick={() => atualizarStatus(pedido.id, 'completo')}>
+                              Marcar como Completo
+                            </MenuItem>
+                            <MenuItem onClick={() => atualizarStatus(pedido.id, 'falha')}>
+                              Marcar como Falha
+                            </MenuItem>
+                            <MenuItem onClick={() => atualizarStatus(pedido.id, 'cancelado')}>
+                              Marcar como Cancelado
+                            </MenuItem>
+                          </MenuList>
+                        </Menu>
+                      </HStack>
                     </Td>
                   </Tr>
                 ))
