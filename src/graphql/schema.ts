@@ -108,6 +108,29 @@ export const typeDefs = gql`
     crescimento: Int!
   }
 
+  # Dados do dashboard
+  type DadosDashboard {
+    stats: EstatisticasGerais!
+    graficoTransacoes: [DadosGrafico!]!
+    graficoPedidos: [DadosGrafico!]!
+    graficoUsuarios: [DadosGrafico!]!
+    atividadesRecentes: [AtividadeRecente!]!
+  }
+  
+  type EstatisticasGerais {
+    totalTransacoes: Int!
+    totalPedidos: Int!
+    totalUsuarios: Int!
+    crescimentoTransacoes: Float!
+    crescimentoPedidos: Float!
+    crescimentoUsuarios: Float!
+  }
+  
+  type DadosGrafico {
+    data: String!
+    valor: Int!
+  }
+
   # Para atividades recentes
   type AtividadeRecente {
     tipo: String!
@@ -117,25 +140,6 @@ export const typeDefs = gql`
     item: String!
     status: String!
     valor: Int!
-  }
-
-  # Dados do dashboard
-  type DadosDashboard {
-    estatisticas: EstatisticasDashboard!
-    graficos: GraficosDashboard!
-    atividadesRecentes: [AtividadeRecente!]!
-  }
-
-  type EstatisticasDashboard {
-    transacoes: EstatisticasTransacoes!
-    pedidos: EstatisticasPedidos!
-    usuarios: EstatisticasUsuarios!
-  }
-
-  type GraficosDashboard {
-    transacoesPorDia: [TransacaoPorDia!]!
-    pedidosPorDia: [PedidoPorDia!]!
-    statusPedidos: StatusPedidosGrafico!
   }
 
   # Input para filtros

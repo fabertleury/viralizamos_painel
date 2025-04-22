@@ -262,116 +262,32 @@ async function obterAtividadesRecentes(limite = 10) {
   }
 }
 
-interface DashboardData {
-  estatisticas: {
-    transacoes: {
-      total: number;
-      crescimento: number;
-      valorTotal: number;
-    };
-    pedidos: {
-      total: number;
-      crescimento: number;
-      completados: number;
-      pendentes: number;
-      falhas: number;
-    };
-    usuarios: {
-      total: number;
-      crescimento: number;
-      novos: number;
-    };
-  };
-  graficos: {
-    transacoesPorDia: Array<{
-      data: string;
-      total: number;
-      valorAprovado: number;
-    }>;
-    statusPedidos: {
-      labels: string[];
-      dados: number[];
-    };
-  };
-  atividades: Array<{
-    id: string;
-    tipo: string;
-    usuario: string;
-    item: string;
-    status: string;
-    data: string;
-  }>;
-  ultimaAtualizacao: string;
-}
-
-const dashboardResolvers = {
-  Query: {
-    dadosDashboard: async (): Promise<DashboardData> => {
-      try {
-        // Buscar dados reais de diferentes fontes em paralelo
-        console.log('Buscando dados do dashboard em tempo real via GraphQL...');
-        
-        const [
-          estatisticasPedidos,
-          estatisticasTransacoes,
-          estatisticasUsuarios,
-          transacoesPorDia,
-          pedidosPorStatus,
-          atividadesRecentes
-        ] = await Promise.all([
-          obterEstatisticasPedidos(),
-          obterEstatisticasTransacoes(),
-          obterEstatisticasUsuarios(),
-          obterTransacoesPorPeriodo(7),
-          obterPedidosPorPeriodo(7),
-          obterAtividadesRecentes(10)
-        ]);
-        
-        // Calcular dados para o gráfico de status de pedidos
-        const statusPedidos = {
-          labels: ['Completos', 'Processando', 'Pendentes', 'Falhas'],
-          dados: [
-            estatisticasPedidos.completados,
-            estatisticasPedidos.processando,
-            estatisticasPedidos.pendentes,
-            estatisticasPedidos.falhas
-          ]
-        };
-        
-        // Estruturar e retornar dados do dashboard
-        return {
-          estatisticas: {
-            transacoes: {
-              total: estatisticasTransacoes.total,
-              crescimento: estatisticasTransacoes.crescimento,
-              valorTotal: estatisticasTransacoes.valorTotal
-            },
-            pedidos: {
-              total: estatisticasPedidos.total,
-              crescimento: estatisticasPedidos.crescimento,
-              completados: estatisticasPedidos.completados,
-              pendentes: estatisticasPedidos.pendentes,
-              falhas: estatisticasPedidos.falhas
-            },
-            usuarios: {
-              total: estatisticasUsuarios.total,
-              crescimento: estatisticasUsuarios.crescimento,
-              novos: estatisticasUsuarios.novos
-            }
-          },
-          graficos: {
-            transacoesPorDia,
-            statusPedidos
-          },
-          atividades: atividadesRecentes,
-          ultimaAtualizacao: new Date().toISOString()
-        };
-      } catch (error) {
-        console.error('Erro ao obter dados do dashboard:', error);
-        throw new Error('Erro ao obter dados do dashboard. Por favor, tente novamente.');
+export const dadosDashboard = async (_: any, __: any, context: { token: string }) => {
+  try {
+    const apiUrl = process.env.API_URL || 'http://localhost:3000';
+    const response = await axios.get(`${apiUrl}/api/dashboard`, {
+      headers: {
+        Authorization: `Bearer ${context.token}`
       }
-    }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao buscar dados do dashboard:', error);
+    // Retorna estrutura padrão com zeros em caso de erro
+    return {
+      stats: {
+        totalTransacoes: 0,
+        totalPedidos: 0,
+        totalUsuarios: 0,
+        crescimentoTransacoes: 0,
+        crescimentoPedidos: 0,
+        crescimentoUsuarios: 0
+      },
+      graficoTransacoes: [],
+      graficoPedidos: [],
+      graficoUsuarios: [],
+      atividadesRecentes: []
+    };
   }
-};
-
-export default dashboardResolvers; 
+}; 

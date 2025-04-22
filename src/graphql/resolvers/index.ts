@@ -6,7 +6,7 @@ import { usuariosResolvers } from './usuariosResolvers';
 // Combinar todos os resolvers
 export const resolvers = {
   Query: {
-    ...dashboardResolvers.Query,
+    dadosDashboard: dashboardResolvers.dadosDashboard,
     ...pedidosResolvers.Query,
     ...transacoesResolvers.Query,
     ...usuariosResolvers.Query,
