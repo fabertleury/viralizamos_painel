@@ -36,10 +36,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // SOLUÇÃO ALTERNATIVA: Usar conexão direta ao banco de dados
     // devido a problemas de autenticação com a API
-    console.log('[API:Transacoes] Usando conexão direta ao banco de dados');
+    console.log('[API:Transacoes] Usando conexão direta ao banco de dados (V2)');
     
     try {
-      // Chamar o endpoint direto que acessa o banco de dados
+      // Chamar o endpoint direto V2 que acessa o banco de dados com tratamento de erros melhorado
       const diretaParams: Record<string, any> = {};
       
       if (status && status !== 'todos') {
@@ -57,28 +57,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       diretaParams.pagina = pagina;
       diretaParams.limite = limite;
       
-      // Fazer requisição para o endpoint direto
-      const response = await axios.get('/api/transacoes/direto', { params: diretaParams });
+      // Fazer requisição para o endpoint direto V2
+      console.log('[API:Transacoes] Chamando endpoint direto-v2 com parâmetros:', diretaParams);
+      const response = await axios.get('/api/transacoes/direto-v2', { params: diretaParams });
       
-      console.log('[API:Transacoes] Resposta da conexão direta:', response.status);
+      console.log('[API:Transacoes] Resposta da conexão direta V2:', response.status);
       
       if (response.data && response.data.transacoes) {
         return res.status(200).json({
           transacoes: response.data.transacoes,
-          total: response.data.total_transactions || response.data.transacoes.length,
-          origem: 'banco_direto',
+          total: response.data.total || response.data.transacoes.length,
+          pagina: response.data.pagina,
+          limite: response.data.limite,
+          total_paginas: response.data.total_paginas,
+          origem: 'banco_direto_v2',
           debug: {
             conexaoDireta: true,
             env: process.env.NODE_ENV,
-            dbUrl: response.data.db_url
+            timestamp: new Date().toISOString()
           }
         });
       } else {
-        throw new Error('Formato de resposta inválido da conexão direta');
+        throw new Error('Formato de resposta inválido da conexão direta V2');
       }
     } catch (directError) {
-      console.error('[API:Transacoes] Erro na conexão direta:', directError);
-      throw directError;
+      console.error('[API:Transacoes] Erro na conexão direta V2:', directError);
+      
+      // Tentar o endpoint direto original como fallback
+      try {
+        console.log('[API:Transacoes] Tentando endpoint direto original como fallback');
+        const diretaParams: Record<string, any> = {};
+        
+        if (status && status !== 'todos') {
+          diretaParams.status = status;
+        }
+        
+        if (metodo && metodo !== 'todos') {
+          diretaParams.metodo = metodo;
+        }
+        
+        if (termoBusca) {
+          diretaParams.termoBusca = termoBusca;
+        }
+        
+        diretaParams.pagina = pagina;
+        diretaParams.limite = limite;
+        
+        const fallbackResponse = await axios.get('/api/transacoes/direto', { params: diretaParams });
+        
+        if (fallbackResponse.data && fallbackResponse.data.transacoes) {
+          return res.status(200).json({
+            transacoes: fallbackResponse.data.transacoes,
+            total: fallbackResponse.data.total_transactions || fallbackResponse.data.transacoes.length,
+            origem: 'banco_direto_fallback',
+            debug: {
+              conexaoDireta: true,
+              env: process.env.NODE_ENV,
+              fallback: true
+            }
+          });
+        } else {
+          throw new Error('Formato de resposta inválido do fallback');
+        }
+      } catch (fallbackError) {
+        console.error('[API:Transacoes] Erro no fallback:', fallbackError);
+        throw directError; // Lançar o erro original
+      }
     }
     
   } catch (error) {
