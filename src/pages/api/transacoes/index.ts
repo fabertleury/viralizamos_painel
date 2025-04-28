@@ -65,7 +65,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Chamar a API de pagamentos
     const response = await axios.get(`${pagamentosApiUrl}/transactions/list`, {
       params,
-      headers
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `ApiKey ${apiKey}`
+      }
     });
     
     console.log(`[API:Transacoes] Resposta recebida: ${response.status}`);
