@@ -18,15 +18,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Verificar configurações críticas
     if (!pagamentosApiUrl) {
-      throw new Error('URL da API de pagamentos não configurada');
+      console.warn('[API:Transacoes] URL da API de pagamentos não configurada, usando conexão direta');
     }
     if (!apiKey) {
-      throw new Error('API Key não configurada');
+      console.warn('[API:Transacoes] API Key não configurada, usando conexão direta');
     }
 
     console.log('[API:Transacoes] Iniciando busca de transações');
-    console.log(`[API:Transacoes] API URL: ${pagamentosApiUrl}`);
-    console.log(`[API:Transacoes] API Key presente: ${!!apiKey}`);
     
     const { 
       status, 
@@ -36,96 +34,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       limite = '10' 
     } = req.query;
 
-    // Construir parâmetros para a API de pagamentos
-    const params: Record<string, any> = {
-      page: pagina,
-      limit: limite
-    };
+    // SOLUÇÃO ALTERNATIVA: Usar conexão direta ao banco de dados
+    // devido a problemas de autenticação com a API
+    console.log('[API:Transacoes] Usando conexão direta ao banco de dados');
     
-    if (status && status !== 'todos') {
-      params.status = status;
-    }
-    
-    if (metodo && metodo !== 'todos') {
-      params.method = metodo;
-    }
-    
-    if (termoBusca) {
-      params.search = termoBusca;
-    }
-    
-    // Configuração dos headers - Alterando o formato da autorização
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}` // Mudando de ApiKey para Bearer
-    };
-    
-    console.log(`[API:Transacoes] Chamando endpoint: ${pagamentosApiUrl}/api/transactions/list`);
-    console.log(`[API:Transacoes] Parâmetros:`, JSON.stringify(params));
-    console.log('[API:Transacoes] Headers:', JSON.stringify({
-      ...headers,
-      'Authorization': '***MASKED***'
-    }));
-    
-    // Tentar fazer a requisição com retry
-    let retryCount = 0;
-    const maxRetries = 3;
-    let lastError = null;
-
-    while (retryCount < maxRetries) {
-      try {
-        // Ajustando o endpoint para incluir /api no path
-        const response = await axios.get(`${pagamentosApiUrl}/api/transactions/list`, {
-          params,
-          headers,
-          timeout: 10000 // 10 segundos timeout
-        });
-
-        console.log(`[API:Transacoes] Resposta recebida: ${response.status}`);
-        console.log(`[API:Transacoes] Total de transações: ${response.data.total || 0}`);
-        
-        // Verificar se a resposta tem o formato esperado
-        if (!response.data || !Array.isArray(response.data.transactions)) {
-          throw new Error(`Resposta inválida da API: ${JSON.stringify(response.data)}`);
-        }
-
-        // Mapear a resposta para o formato esperado pelo frontend
-        const transacoes = response.data.transactions.map((t: any) => ({
-          id: t.id,
-          data_criacao: t.created_at,
-          valor: t.amount,
-          status: t.status,
-          metodo_pagamento: t.method,
-          cliente_id: t.payment_request?.customer_id || '',
-          cliente_nome: t.payment_request?.customer_name || '',
-          cliente_email: t.payment_request?.customer_email || '',
-          produto_id: t.payment_request?.service_id || '',
-          produto_nome: t.payment_request?.service_name || '',
-          order_id: t.external_id || ''
-        }));
-        
+    try {
+      // Chamar o endpoint direto que acessa o banco de dados
+      const diretaParams: Record<string, any> = {};
+      
+      if (status && status !== 'todos') {
+        diretaParams.status = status;
+      }
+      
+      if (metodo && metodo !== 'todos') {
+        diretaParams.metodo = metodo;
+      }
+      
+      if (termoBusca) {
+        diretaParams.termoBusca = termoBusca;
+      }
+      
+      diretaParams.pagina = pagina;
+      diretaParams.limite = limite;
+      
+      // Fazer requisição para o endpoint direto
+      const response = await axios.get('/api/transacoes/direto', { params: diretaParams });
+      
+      console.log('[API:Transacoes] Resposta da conexão direta:', response.status);
+      
+      if (response.data && response.data.transacoes) {
         return res.status(200).json({
-          transacoes,
-          total: response.data.total || 0,
+          transacoes: response.data.transacoes,
+          total: response.data.total_transactions || response.data.transacoes.length,
+          origem: 'banco_direto',
           debug: {
+            conexaoDireta: true,
             env: process.env.NODE_ENV,
-            apiUrl: pagamentosApiUrl,
-            hasApiKey: !!apiKey,
-            retryCount
+            dbUrl: response.data.db_url
           }
         });
-      } catch (error) {
-        lastError = error;
-        retryCount++;
-        
-        if (retryCount < maxRetries) {
-          console.log(`[API:Transacoes] Tentativa ${retryCount} falhou, tentando novamente...`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-          continue;
-        }
-        
-        throw error;
+      } else {
+        throw new Error('Formato de resposta inválido da conexão direta');
       }
+    } catch (directError) {
+      console.error('[API:Transacoes] Erro na conexão direta:', directError);
+      throw directError;
     }
     
   } catch (error) {
