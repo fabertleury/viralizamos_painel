@@ -3,7 +3,7 @@ import axios, { AxiosError } from 'axios';
 
 // Configuração da API de pagamentos - Importante: não usar NEXT_PUBLIC no servidor
 const pagamentosApiUrl = process.env.PAGAMENTOS_API_URL || process.env.NEXT_PUBLIC_PAGAMENTOS_API_URL || 'https://pagamentos.viralizamos.com/api';
-const apiKey = process.env.PAGAMENTOS_API_KEY;
+const apiKey = process.env.PAYMENTS_API_KEY;
 
 // Log de configuração para debug
 console.log('[API:Transacoes:Config] URL da API:', pagamentosApiUrl);
