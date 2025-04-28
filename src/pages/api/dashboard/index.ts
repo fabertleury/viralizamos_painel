@@ -319,11 +319,16 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
       SELECT 
         DATE(created_at) as data,
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_aprovado
+        COUNT(CASE WHEN status = 'approved' THEN 1 END) as total_aprovadas,
+        COUNT(CASE WHEN status = 'rejected' THEN 1 END) as total_rejeitadas,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as total_pendentes,
+        SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_aprovado,
+        SUM(amount) as valor_total
       FROM 
         "transactions"
       WHERE 
-        created_at >= NOW() - INTERVAL '${dias} days'
+        created_at >= CURRENT_DATE - INTERVAL '${dias - 1} days'
+        AND created_at <= CURRENT_DATE + INTERVAL '1 day'
       GROUP BY 
         DATE(created_at)
       ORDER BY 
@@ -336,7 +341,11 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
     const transacoes = result.rows.map(row => ({
       data: row.data.toISOString().split('T')[0],
       total: parseInt(row.total || '0'),
-      valorAprovado: parseFloat(row.valor_aprovado || '0')
+      totalAprovadas: parseInt(row.total_aprovadas || '0'),
+      totalRejeitadas: parseInt(row.total_rejeitadas || '0'),
+      totalPendentes: parseInt(row.total_pendentes || '0'),
+      valorAprovado: parseFloat(row.valor_aprovado || '0'),
+      valorTotal: parseFloat(row.valor_total || '0')
     }));
     
     console.log(`Transações por período (${dias} dias):`, transacoes);

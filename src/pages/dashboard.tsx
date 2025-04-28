@@ -40,6 +40,9 @@ interface DashboardData {
       data: string;
       total: number;
       valorAprovado: number;
+      totalAprovadas: number;
+      totalPendentes: number;
+      totalRejeitadas: number;
     }>;
     statusPedidos: {
       labels: string[];
@@ -158,6 +161,7 @@ function Dashboard() {
       toolbar: {
         show: false,
       },
+      stacked: false,
     },
     stroke: {
       curve: 'smooth' as const,
@@ -190,50 +194,99 @@ function Dashboard() {
       x: {
         format: 'dd/MM',
       },
+      y: {
+        formatter: function(value: number, { seriesIndex }: { seriesIndex: number }) {
+          if (seriesIndex === 0) return value.toString();
+          return formatCurrency(value);
+        }
+      }
     },
-    yaxis: {
-      labels: {
-        formatter: function(val: number) {
-          return Math.round(val).toString();
+    yaxis: [
+      {
+        title: {
+          text: 'Quantidade'
+        },
+        labels: {
+          formatter: function(val: number) {
+            return Math.round(val).toString();
+          },
         },
       },
-    },
+      {
+        opposite: true,
+        title: {
+          text: 'Valor (R$)'
+        },
+        labels: {
+          formatter: function(val: number) {
+            return formatCurrency(val);
+          },
+        },
+      }
+    ],
   };
 
   const transacoesChartSeries = [
     {
-      name: 'Transações',
+      name: 'Total de Transações',
+      type: 'column',
       data: dashboardData.graficos.transacoesPorDia.map(item => item.total),
     },
     {
-      name: 'Valor (R$)',
+      name: 'Valor Aprovado',
+      type: 'line',
       data: dashboardData.graficos.transacoesPorDia.map(item => item.valorAprovado),
-    },
+    }
   ];
 
-  // Configuração do gráfico de status de pedidos
-  const pedidosChartOptions = {
+  // Configuração do novo gráfico de status das transações
+  const statusTransacoesChartOptions = {
     chart: {
-      type: 'pie' as const,
+      type: 'bar' as const,
+      stacked: true,
+      toolbar: {
+        show: false
+      }
     },
-    labels: dashboardData.graficos.statusPedidos.labels,
-    colors: ['#48BB78', '#3182CE', '#ECC94B', '#E53E3E'],
-    responsive: [
-      {
-        breakpoint: 480,
-        options: {
-          chart: {
-            width: 200,
-          },
-          legend: {
-            position: 'bottom',
-          },
-        },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        borderRadius: 4,
       },
-    ],
+    },
+    colors: ['#48BB78', '#ECC94B', '#E53E3E'],
+    xaxis: {
+      categories: dashboardData.graficos.transacoesPorDia.map(item => 
+        new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      ),
+    },
+    legend: {
+      position: 'top' as const,
+      horizontalAlign: 'left' as const
+    },
+    tooltip: {
+      y: {
+        formatter: function(value: number) {
+          return value.toString();
+        }
+      }
+    }
   };
 
-  const pedidosChartSeries = dashboardData.graficos.statusPedidos.dados;
+  const statusTransacoesChartSeries = [
+    {
+      name: 'Aprovadas',
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalAprovadas)
+    },
+    {
+      name: 'Pendentes',
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalPendentes)
+    },
+    {
+      name: 'Rejeitadas',
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalRejeitadas)
+    }
+  ];
 
     return (
     <AdminLayout>
@@ -360,31 +413,31 @@ function Dashboard() {
           {/* Gráfico de Transações */}
           <Card>
             <CardContent className="p-6">
-              <Heading as="h2" size="md" mb={4}>Transações (últimos 7 dias)</Heading>
+              <Heading as="h2" size="md" mb={4}>Volume de Transações e Valores</Heading>
               <Box height="300px">
               {typeof window !== 'undefined' && (
                 <Chart
                   options={transacoesChartOptions}
                   series={transacoesChartSeries}
-                  type="area"
-                    height="100%"
+                  type="line"
+                  height="100%"
                 />
               )}
               </Box>
             </CardContent>
           </Card>
 
-          {/* Gráfico de Status dos Pedidos */}
+          {/* Novo Gráfico de Status das Transações */}
           <Card>
             <CardContent className="p-6">
-              <Heading as="h2" size="md" mb={4}>Status dos Pedidos</Heading>
+              <Heading as="h2" size="md" mb={4}>Status das Transações por Dia</Heading>
               <Box height="300px">
               {typeof window !== 'undefined' && (
                 <Chart
-                  options={pedidosChartOptions}
-                  series={pedidosChartSeries}
-                  type="pie"
-                    height="100%"
+                  options={statusTransacoesChartOptions}
+                  series={statusTransacoesChartSeries}
+                  type="bar"
+                  height="100%"
                 />
               )}
               </Box>
