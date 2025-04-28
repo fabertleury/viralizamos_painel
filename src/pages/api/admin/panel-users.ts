@@ -72,31 +72,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       // Tentar buscar diretamente da API usando o token fornecido
       console.log('Tentando acesso direto à API de orders');
-      const directResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com'}/api/api/admin/panel-users?${params.toString()}`,
-        {
-          method: 'GET',
-          headers: headers
-        }
-      );
-      
-      if (!directResponse.ok) {
-        // Se o erro for de autenticação, retornar detalhes específicos
-        if (directResponse.status === 401) {
-          console.error('Erro de autenticação na API direta:', directResponse.status, directResponse.statusText);
-          return res.status(401).json({
-            error: 'Não autorizado',
-            message: 'Token inválido ou sem permissão para acessar este recurso',
-            statusCode: directResponse.status
-          });
+      try {
+        const directResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_ORDERS_API_URL || 'https://orders.viralizamos.com'}/api/api/admin/panel-users?${params.toString()}`,
+          {
+            method: 'GET',
+            headers: headers
+          }
+        );
+        
+        if (!directResponse.ok) {
+          // Se o erro for de autenticação, retornar detalhes específicos
+          if (directResponse.status === 401) {
+            console.error('Erro de autenticação na API direta:', directResponse.status, directResponse.statusText);
+            return res.status(401).json({
+              error: 'Não autorizado',
+              message: 'Token inválido ou sem permissão para acessar este recurso',
+              statusCode: directResponse.status
+            });
+          }
+          
+          // Para outros erros
+          throw new Error(`Erro na API direta: ${directResponse.status} ${directResponse.statusText}`);
         }
         
-        // Para outros erros
-        throw new Error(`Erro na API direta: ${directResponse.status} ${directResponse.statusText}`);
+        const data = await directResponse.json();
+        return res.status(200).json(data);
+      } catch (directApiError) {
+        console.error('Erro ao tentar acesso direto à API:', directApiError);
+        
+        // SOLUÇÃO ALTERNATIVA: Usar conexão direta ao banco de dados
+        console.log('[API:PanelUsers] Tentando buscar usuários diretamente do banco de dados');
+        try {
+          // Chamar o endpoint direto que acessa o banco de dados
+          const diretaResponse = await fetch(`/api/admin/panel-users-direto?${params.toString()}`);
+          
+          if (!diretaResponse.ok) {
+            throw new Error(`Erro na API direta DB: ${diretaResponse.status} ${diretaResponse.statusText}`);
+          }
+          
+          const diretaData = await diretaResponse.json();
+          console.log('[API:PanelUsers] Dados obtidos diretamente do banco de dados');
+          return res.status(200).json({
+            ...diretaData,
+            origem: 'banco_direto'
+          });
+        } catch (dbError) {
+          console.error('[API:PanelUsers] Erro ao buscar do banco de dados:', dbError);
+          throw dbError;
+        }
       }
-      
-      const data = await directResponse.json();
-      return res.status(200).json(data);
     }
   } catch (error: any) {
     console.error('Erro ao buscar usuários detalhados:', error);
