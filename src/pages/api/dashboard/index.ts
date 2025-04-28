@@ -438,91 +438,88 @@ async function obterAtividadesRecentes(limite: number = 10) {
   }
 }
 
+async function obterEstatisticasDoDia() {
+  try {
+    const query = `
+      SELECT 
+        COUNT(*) as total_transacoes,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as total_aprovadas,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as total_pendentes,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as total_recusadas,
+        SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_total_aprovado,
+        SUM(amount) as valor_total
+      FROM "transactions"
+      WHERE DATE(created_at) = CURRENT_DATE
+    `;
+    
+    const result = await pagamentosPool.query(query);
+    const dados = result.rows[0];
+    
+    return {
+      total: parseInt(dados.total_transacoes || '0'),
+      aprovadas: parseInt(dados.total_aprovadas || '0'),
+      pendentes: parseInt(dados.total_pendentes || '0'),
+      recusadas: parseInt(dados.total_recusadas || '0'),
+      valorTotal: parseFloat(dados.valor_total || '0'),
+      valorAprovado: parseFloat(dados.valor_total_aprovado || '0')
+    };
+  } catch (error) {
+    console.error('Erro ao obter estatísticas do dia:', error);
+    return {
+      total: 0,
+      aprovadas: 0,
+      pendentes: 0,
+      recusadas: 0,
+      valorTotal: 0,
+      valorAprovado: 0
+    };
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Método não permitido' });
+    return res.status(405).json({ message: 'Método não permitido' });
   }
-
+  
   try {
-    // Buscar dados reais de diferentes fontes em paralelo
-    console.log('Buscando dados do dashboard em tempo real (AMBIENTE DE PRODUÇÃO)...');
-    
-    let [
+    // Executar todas as consultas em paralelo
+    const [
       estatisticasPedidos,
       estatisticasTransacoes,
       estatisticasUsuarios,
-      transacoesPorDia,
-      pedidosPorStatus,
-      atividadesRecentes
+      pedidosPorPeriodo,
+      transacoesPorPeriodo,
+      atividadesRecentes,
+      estatisticasDoDia
     ] = await Promise.all([
-      obterEstatisticasPedidos().catch(error => {
-        console.error("Erro ao obter estatísticas de pedidos:", error);
-        return {
-          total: 0,
-          concluidos: 0,
-          pendentes: 0,
-          cancelados: 0,
-          valorTotal: 0,
-          crescimento: 0
-        };
-      }),
-      obterEstatisticasTransacoes().catch(error => {
-        console.error("Erro ao obter estatísticas de transações:", error);
-        return {
-          total: 0,
-          aprovadas: 0,
-          pendentes: 0,
-          recusadas: 0,
-          valorTotal: 0,
-          crescimento: 0
-        };
-      }),
-      obterEstatisticasUsuarios().catch(error => {
-        console.error("Erro ao obter estatísticas de usuários:", error);
-        return {
-          total: 0,
-          novos: 0,
-          crescimento: 0
-        };
-      }),
-      obterTransacoesPorPeriodo(7).catch(error => {
-        console.error("Erro ao obter transações por período:", error);
-        return [];
-      }),
-      obterPedidosPorPeriodo(7).catch(error => {
-        console.error("Erro ao obter pedidos por período:", error);
-        return [];
-      }),
-      obterAtividadesRecentes(10).catch(error => {
-        console.error("Erro ao obter atividades recentes:", error);
-        return [];
-      })
+      obterEstatisticasPedidos(),
+      obterEstatisticasTransacoes(),
+      obterEstatisticasUsuarios(),
+      obterPedidosPorPeriodo(),
+      obterTransacoesPorPeriodo(),
+      obterAtividadesRecentes(),
+      obterEstatisticasDoDia()
     ]);
     
-    // Calcular dados para o gráfico de status de pedidos
-    const grafico = {
-      labels: ['Completos', 'Pendentes', 'Cancelados'],
-      dados: [
-        estatisticasPedidos.concluidos,
-        estatisticasPedidos.pendentes,
-        estatisticasPedidos.cancelados
-      ]
-    };
-    
-    // Estruturar dados do dashboard
-    const dashboardData = {
+    // Construir resposta
+    const response = {
       estatisticas: {
         transacoes: {
           total: estatisticasTransacoes.total,
           crescimento: estatisticasTransacoes.crescimento,
-          valorTotal: estatisticasTransacoes.valorTotal
+          valorTotal: estatisticasTransacoes.valorTotal,
+          hoje: {
+            total: estatisticasDoDia.total,
+            valorTotal: estatisticasDoDia.valorTotal,
+            valorAprovado: estatisticasDoDia.valorAprovado
+          }
         },
         pedidos: {
           total: estatisticasPedidos.total,
           crescimento: estatisticasPedidos.crescimento,
-          concluidos: estatisticasPedidos.concluidos,
+          completados: estatisticasPedidos.concluidos,
           pendentes: estatisticasPedidos.pendentes,
-          cancelados: estatisticasPedidos.cancelados
+          falhas: estatisticasPedidos.cancelados
         },
         usuarios: {
           total: estatisticasUsuarios.total,
@@ -531,27 +528,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       },
       graficos: {
-        transacoesPorDia,
-        grafico
+        transacoesPorDia: transacoesPorPeriodo,
+        pedidosPorDia: pedidosPorPeriodo,
+        statusPedidos: {
+          labels: ['Completados', 'Pendentes', 'Falhas'],
+          dados: [
+            estatisticasPedidos.concluidos,
+            estatisticasPedidos.pendentes,
+            estatisticasPedidos.cancelados
+          ]
+        }
       },
       atividades: atividadesRecentes,
       ultimaAtualizacao: new Date().toISOString()
     };
-
-    console.log('Dados do dashboard estruturados:', {
-      'Transações totais': dashboardData.estatisticas.transacoes.total,
-      'Pedidos totais': dashboardData.estatisticas.pedidos.total,
-      'Usuários totais': dashboardData.estatisticas.usuarios.total,
-      'Receita total': dashboardData.estatisticas.transacoes.valorTotal
-    });
-
-    // Retornar os dados do dashboard
-    return res.status(200).json(dashboardData);
+    
+    res.status(200).json(response);
   } catch (error) {
-    console.error('Erro ao processar requisição:', error);
-    return res.status(500).json({ 
-      error: 'Erro interno do servidor', 
-      detalhes: error instanceof Error ? error.message : 'Erro desconhecido'
+    console.error('Erro ao processar requisição do dashboard:', error);
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 } 

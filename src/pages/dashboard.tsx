@@ -16,6 +16,11 @@ interface DashboardData {
       total: number;
       crescimento: number;
       valorTotal: number;
+      hoje: {
+        total: number;
+        valorTotal: number;
+        valorAprovado: number;
+      };
     };
     pedidos: {
       total: number;
@@ -42,12 +47,12 @@ interface DashboardData {
     };
   };
   atividades: Array<{
-  id: string;
-  tipo: string;
-  usuario: string;
-  item: string;
-  status: string;
-  data: string;
+    id: string;
+    tipo: string;
+    usuario: string;
+    item: string;
+    status: string;
+    data: string;
   }>;
   ultimaAtualizacao: string;
 }
@@ -235,23 +240,71 @@ function Dashboard() {
       <Box p={5}>
         <Heading as="h1" size="xl" mb={6}>Dashboard</Heading>
 
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
-          {/* Card de Transações */}
+        {/* Cards de Estatísticas */}
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={5} mb={8}>
+          {/* Card de Transações do Dia */}
           <Card>
-            <CardContent className="p-6">
+            <CardContent>
               <StatGroup>
                 <Stat>
-                  <StatLabel fontSize="sm" color="gray.500">Transações</StatLabel>
-                  <StatNumber fontSize="3xl">{dashboardData.estatisticas.transacoes.total}</StatNumber>
+                  <StatLabel>Transações Hoje</StatLabel>
+                  <StatNumber>{dashboardData.estatisticas.transacoes.hoje.total}</StatNumber>
                   <StatHelpText>
-                    <StatArrow type={dashboardData.estatisticas.transacoes.crescimento >= 0 ? 'increase' : 'decrease'} />
-                    {Math.abs(dashboardData.estatisticas.transacoes.crescimento)}% em relação ao mês anterior
+                    Valor Total: {formatCurrency(dashboardData.estatisticas.transacoes.hoje.valorTotal)}
                   </StatHelpText>
                 </Stat>
               </StatGroup>
             </CardContent>
           </Card>
 
+          {/* Card de Valor Aprovado do Dia */}
+          <Card>
+            <CardContent>
+              <StatGroup>
+                <Stat>
+                  <StatLabel>Valor Aprovado Hoje</StatLabel>
+                  <StatNumber>{formatCurrency(dashboardData.estatisticas.transacoes.hoje.valorAprovado)}</StatNumber>
+                  <StatHelpText>
+                    Taxa de Aprovação: {((dashboardData.estatisticas.transacoes.hoje.valorAprovado / dashboardData.estatisticas.transacoes.hoje.valorTotal) * 100).toFixed(1)}%
+                  </StatHelpText>
+                </Stat>
+              </StatGroup>
+            </CardContent>
+          </Card>
+
+          {/* Card de Total de Transações */}
+          <Card>
+            <CardContent>
+              <StatGroup>
+                <Stat>
+                  <StatLabel>Total de Transações</StatLabel>
+                  <StatNumber>{dashboardData.estatisticas.transacoes.total}</StatNumber>
+                  <StatHelpText>
+                    <StatArrow type={dashboardData.estatisticas.transacoes.crescimento >= 0 ? 'increase' : 'decrease'} />
+                    {formatPercentage(dashboardData.estatisticas.transacoes.crescimento)}
+                  </StatHelpText>
+                </Stat>
+              </StatGroup>
+            </CardContent>
+          </Card>
+
+          {/* Card de Valor Total */}
+          <Card>
+            <CardContent>
+              <StatGroup>
+                <Stat>
+                  <StatLabel>Valor Total</StatLabel>
+                  <StatNumber>{formatCurrency(dashboardData.estatisticas.transacoes.valorTotal)}</StatNumber>
+                  <StatHelpText>
+                    Últimos 30 dias
+                  </StatHelpText>
+                </Stat>
+              </StatGroup>
+            </CardContent>
+          </Card>
+        </SimpleGrid>
+
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
           {/* Card de Pedidos */}
           <Card>
             <CardContent className="p-6">
@@ -406,6 +459,11 @@ const normalizeData = (data: any): DashboardData => {
         total: data?.estatisticas?.transacoes?.total ?? 0,
         crescimento: data?.estatisticas?.transacoes?.crescimento ?? 0,
         valorTotal: data?.estatisticas?.transacoes?.valorTotal ?? 0,
+        hoje: {
+          total: data?.estatisticas?.transacoes?.hoje?.total ?? 0,
+          valorTotal: data?.estatisticas?.transacoes?.hoje?.valorTotal ?? 0,
+          valorAprovado: data?.estatisticas?.transacoes?.hoje?.valorAprovado ?? 0,
+        },
       },
       pedidos: {
         total: data?.estatisticas?.pedidos?.total ?? 0,
