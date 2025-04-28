@@ -310,6 +310,8 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
   } catch (error) {
     console.error(`Erro ao obter pedidos por período (${dias} dias):`, error);
     return [];
+  }
+}
 
 async function obterTransacoesPorPeriodo(dias: number = 7) {
   try {
