@@ -310,14 +310,16 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
   } catch (error) {
     console.error(`Erro ao obter pedidos por período (${dias} dias):`, error);
     return [];
-  }
-}
 
 async function obterTransacoesPorPeriodo(dias: number = 7) {
   try {
+    // Obter a data e hora atual no fuso horário do servidor
+    const dataAtual = new Date();
+    console.log(`[Dashboard] Data atual: ${dataAtual.toISOString()}`);
+    
     const query = `
       SELECT 
-        DATE(created_at) as data,
+        DATE(created_at AT TIME ZONE 'America/Sao_Paulo') as data,
         COUNT(*) as total,
         COUNT(CASE WHEN status = 'approved' THEN 1 END) as total_aprovadas,
         COUNT(CASE WHEN status = 'rejected' THEN 1 END) as total_rejeitadas,
@@ -327,13 +329,15 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
       FROM 
         "transactions"
       WHERE 
-        created_at >= CURRENT_DATE - INTERVAL '${dias - 1} days'
-        AND created_at <= CURRENT_DATE + INTERVAL '1 day'
+        created_at >= (CURRENT_DATE - INTERVAL '${dias - 1} days') AT TIME ZONE 'America/Sao_Paulo'
+        AND created_at < (CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'America/Sao_Paulo'
       GROUP BY 
-        DATE(created_at)
+        DATE(created_at AT TIME ZONE 'America/Sao_Paulo')
       ORDER BY 
         data
     `;
+    
+    console.log(`[Dashboard] Consulta SQL para transações por período: ${query}`);
     
     const result = await pagamentosPool.query(query);
     
@@ -449,6 +453,7 @@ async function obterAtividadesRecentes(limite: number = 10) {
 
 async function obterEstatisticasDoDia() {
   try {
+    // Usar o mesmo padrão de fuso horário que foi implementado em obterTransacoesPorPeriodo
     const query = `
       SELECT 
         COUNT(*) as total_transacoes,
@@ -458,8 +463,10 @@ async function obterEstatisticasDoDia() {
         SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_total_aprovado,
         SUM(amount) as valor_total
       FROM "transactions"
-      WHERE DATE(created_at) = CURRENT_DATE
+      WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE AT TIME ZONE 'America/Sao_Paulo'
     `;
+    
+    console.log(`[Dashboard] Consulta SQL para estatísticas do dia: ${query}`);
     
     const result = await pagamentosPool.query(query);
     const dados = result.rows[0];
