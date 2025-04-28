@@ -4,13 +4,23 @@ import { Pool } from 'pg';
 // Conexão com o banco de dados de pedidos (orders)
 const ordersPool = new Pool({
   connectionString: process.env.ORDERS_DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 10, // número máximo de conexões reduzido para evitar sobrecarga
+  idleTimeoutMillis: 10000, // tempo de inatividade reduzido
+  connectionTimeoutMillis: 5000, // timeout de conexão reduzido
+  keepAlive: true, // manter conexões vivas
+  keepAliveInitialDelayMillis: 10000 // delay inicial para o keepalive
 });
 
 // Conexão com o banco de dados de pagamentos
 const pagamentosPool = new Pool({
   connectionString: process.env.PAGAMENTOS_DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 10, // número máximo de conexões reduzido para evitar sobrecarga
+  idleTimeoutMillis: 10000, // tempo de inatividade reduzido
+  connectionTimeoutMillis: 5000, // timeout de conexão reduzido
+  keepAlive: true, // manter conexões vivas
+  keepAliveInitialDelayMillis: 10000 // delay inicial para o keepalive
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
