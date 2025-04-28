@@ -1,27 +1,41 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 
-// Conexão com o banco de dados de pedidos (orders)
+// Conexão com o banco de dados de pedidos (orders) usando a abordagem que funcionou no script de teste
 const ordersPool = new Pool({
-  connectionString: process.env.ORDERS_DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 10, // número máximo de conexões reduzido para evitar sobrecarga
-  idleTimeoutMillis: 10000, // tempo de inatividade reduzido
-  connectionTimeoutMillis: 5000, // timeout de conexão reduzido
-  keepAlive: true, // manter conexões vivas
-  keepAliveInitialDelayMillis: 10000 // delay inicial para o keepalive
+  // Usar a string de conexão diretamente ou a variável de ambiente
+  connectionString: process.env.ORDERS_DATABASE_URL || 'postgresql://postgres:cgbdNabKzdmLNJWfXAGgNFqjwpwouFXZ@switchyard.proxy.rlwy.net:44974/railway',
+  ssl: { rejectUnauthorized: false }, // Simplificado para sempre aceitar certificados auto-assinados
+  max: 5, // Reduzido para 5 conexões máximas como no script de teste
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
+  keepAlive: true
 });
 
-// Conexão com o banco de dados de pagamentos
-const pagamentosPool = new Pool({
-  connectionString: process.env.PAGAMENTOS_DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 10, // número máximo de conexões reduzido para evitar sobrecarga
-  idleTimeoutMillis: 10000, // tempo de inatividade reduzido
-  connectionTimeoutMillis: 5000, // timeout de conexão reduzido
-  keepAlive: true, // manter conexões vivas
-  keepAliveInitialDelayMillis: 10000 // delay inicial para o keepalive
+// Verificar conexão inicial com o banco de dados de orders
+ordersPool.on('error', (err) => {
+  console.error('[API:PanelUsersDireto:Pool] Erro no pool de conexão de orders:', err.message);
 });
+
+console.log('[API:PanelUsersDireto:Init] Pool de conexão de orders inicializado com a abordagem do script de teste');
+
+// Conexão com o banco de dados de pagamentos usando a abordagem que funcionou no script de teste
+const pagamentosPool = new Pool({
+  // Usar a string de conexão diretamente ou a variável de ambiente
+  connectionString: process.env.PAGAMENTOS_DATABASE_URL || 'postgresql://postgres:zacEqGceWerpWpBZZqttjamDOCcdhRbO@shinkansen.proxy.rlwy.net:29036/railway',
+  ssl: { rejectUnauthorized: false }, // Simplificado para sempre aceitar certificados auto-assinados
+  max: 5, // Reduzido para 5 conexões máximas como no script de teste
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
+  keepAlive: true
+});
+
+// Verificar conexão inicial com o banco de dados de pagamentos
+pagamentosPool.on('error', (err) => {
+  console.error('[API:PanelUsersDireto:Pool] Erro no pool de conexão de pagamentos:', err.message);
+});
+
+console.log('[API:PanelUsersDireto:Init] Pool de conexão de pagamentos inicializado com a abordagem do script de teste');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {

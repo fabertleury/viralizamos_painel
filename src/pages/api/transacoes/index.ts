@@ -59,7 +59,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       // Fazer requisição para o endpoint direto V2
       console.log('[API:Transacoes] Chamando endpoint direto-v2 com parâmetros:', diretaParams);
-      const response = await axios.get('/api/transacoes/direto-v2', { params: diretaParams });
+      
+      // Usar o caminho absoluto para evitar problemas de roteamento no servidor
+      const baseUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL}` 
+        : '';
+      
+      // Construir a URL completa
+      const apiUrl = `${baseUrl}/api/transacoes/direto-v2`;
+      console.log('[API:Transacoes] URL completa:', apiUrl);
+      
+      // Fazer a requisição com tratamento de erro melhorado
+      const response = await axios.get(apiUrl, { 
+        params: diretaParams,
+        timeout: 10000 // timeout de 10 segundos
+      });
       
       console.log('[API:Transacoes] Resposta da conexão direta V2:', response.status);
       

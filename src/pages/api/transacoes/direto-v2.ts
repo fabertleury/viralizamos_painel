@@ -1,33 +1,23 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 
-// Conexão direta com o banco de dados de pagamentos
-// Inicialização fora do handler para manter a conexão entre requisições
-let pagamentosPool: Pool | null = null;
+// Conexão direta com o banco de dados de pagamentos usando a abordagem que funcionou no script de teste
+const pagamentosPool = new Pool({
+  // Usar a string de conexão diretamente ou a variável de ambiente
+  connectionString: process.env.PAGAMENTOS_DATABASE_URL || 'postgresql://postgres:zacEqGceWerpWpBZZqttjamDOCcdhRbO@shinkansen.proxy.rlwy.net:29036/railway',
+  ssl: { rejectUnauthorized: false }, // Simplificado para sempre aceitar certificados auto-assinados
+  max: 5, // Reduzido para 5 conexões máximas como no script de teste
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
+  keepAlive: true
+});
 
-try {
-  console.log('[API:TransacoesDiretoV2:Init] Inicializando pool de conexão com o banco de dados de pagamentos');
-  console.log('[API:TransacoesDiretoV2:Init] URL:', process.env.PAGAMENTOS_DATABASE_URL?.substring(0, 20) + '...');
-  
-  pagamentosPool = new Pool({
-    connectionString: process.env.PAGAMENTOS_DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    max: 10, // reduzido o número máximo de conexões para evitar sobrecarga
-    idleTimeoutMillis: 10000, // reduzido o tempo de inatividade
-    connectionTimeoutMillis: 5000, // reduzido o timeout de conexão
-    keepAlive: true, // manter conexões vivas
-    keepAliveInitialDelayMillis: 10000 // delay inicial para o keepalive
-  });
-  
-  // Verificar conexão inicial
-  pagamentosPool.on('error', (err) => {
-    console.error('[API:TransacoesDiretoV2:Pool] Erro no pool de conexão:', err.message);
-  });
-  
-  console.log('[API:TransacoesDiretoV2:Init] Pool de conexão inicializado com sucesso');
-} catch (error) {
-  console.error('[API:TransacoesDiretoV2:Init] Erro ao inicializar pool de conexão:', error);
-}
+// Verificar conexão inicial
+pagamentosPool.on('error', (err) => {
+  console.error('[API:TransacoesDiretoV2:Pool] Erro no pool de conexão:', err.message);
+});
+
+console.log('[API:TransacoesDiretoV2:Init] Pool de conexão inicializado com a abordagem do script de teste');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -37,58 +27,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     console.log('[API:TransacoesDiretoV2] Iniciando busca de transações diretamente do banco');
     
-    // Verificar se o pool de conexão foi inicializado
-    if (!pagamentosPool) {
-      console.error('[API:TransacoesDiretoV2] Pool de conexão não inicializado, tentando reinicializar');
-      
-      try {
-        pagamentosPool = new Pool({
-          connectionString: process.env.PAGAMENTOS_DATABASE_URL,
-          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-          max: 10,
-          idleTimeoutMillis: 10000,
-          connectionTimeoutMillis: 5000,
-          keepAlive: true,
-          keepAliveInitialDelayMillis: 10000
-        });
-        console.log('[API:TransacoesDiretoV2] Pool de conexão reinicializado com sucesso');
-      } catch (poolError) {
-        console.error('[API:TransacoesDiretoV2] Falha ao reinicializar pool:', poolError);
-        return res.status(500).json({ 
-          error: 'Erro de conexão com o banco de dados',
-          message: poolError instanceof Error ? poolError.message : 'Erro desconhecido',
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
+    // Simplificado: não precisamos verificar se o pool foi inicializado porque 
+    // estamos usando a abordagem que funcionou no script de teste
     
-    // Testar conexão com o banco
-    console.log('[API:TransacoesDiretoV2] Testando conexão com o banco de dados');
+    // Testar conexão com o banco - abordagem simplificada como no script de teste
+    console.log('[API:TransacoesDiretoV2] Obtendo conexão do pool');
     const client = await pagamentosPool.connect();
     
     try {
-      // Verificar conexão
-      const testQuery = await client.query('SELECT current_database() as db, current_setting(\'server_version\') as version');
-      const dbInfo = testQuery.rows[0];
-      console.log(`[API:TransacoesDiretoV2] Conexão estabelecida: ${dbInfo.db} (PostgreSQL ${dbInfo.version})`);
+      // Verificar conexão de forma simplificada
+      const testQuery = await client.query('SELECT current_database() as db');
+      console.log(`[API:TransacoesDiretoV2] Conexão estabelecida com o banco: ${testQuery.rows[0].db}`);
       
-      // Verificar as tabelas existentes
-      const tablesQuery = await client.query(`
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public'
-        ORDER BY table_name
+      // Verificar se a tabela transactions existe - simplificado
+      const tableCheckQuery = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = 'transactions'
+        ) as exists
       `);
       
-      const tables = tablesQuery.rows.map(row => row.table_name);
-      console.log('[API:TransacoesDiretoV2] Tabelas disponíveis:', tables);
-      
-      // Verificar se a tabela transactions existe
-      if (!tables.includes('transactions')) {
+      if (!tableCheckQuery.rows[0].exists) {
         console.error('[API:TransacoesDiretoV2] Tabela transactions não encontrada!');
         return res.status(500).json({ 
           error: 'Tabela transactions não encontrada',
-          tabelas_disponiveis: tables,
           timestamp: new Date().toISOString()
         });
       }
@@ -207,8 +169,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           conexao: true,
           db_url: process.env.PAGAMENTOS_DATABASE_URL?.substring(0, 20) + '...',
           ambiente: process.env.NODE_ENV,
-          timestamp: new Date().toISOString(),
-          tabelas: tables
+          timestamp: new Date().toISOString()
         }
       };
       
@@ -219,7 +180,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ 
         error: 'Erro ao executar consultas no banco de dados',
         message: queryError instanceof Error ? queryError.message : 'Erro desconhecido',
-        stack: process.env.NODE_ENV === 'development' && queryError instanceof Error ? queryError.stack : null,
         timestamp: new Date().toISOString()
       });
     } finally {
@@ -233,8 +193,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ 
       error: 'Erro ao buscar transações',
       message: error instanceof Error ? error.message : 'Erro desconhecido',
-      stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : null,
-      pagamentos_url: process.env.PAGAMENTOS_DATABASE_URL?.substring(0, 20) + '...',
       timestamp: new Date().toISOString()
     });
   }
