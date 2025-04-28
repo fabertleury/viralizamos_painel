@@ -8,6 +8,7 @@ const apiKey = process.env.PAYMENTS_API_KEY;
 // Log de configuração para debug
 console.log('[API:Transacoes:Config] URL da API:', pagamentosApiUrl);
 console.log('[API:Transacoes:Config] API Key definida:', !!apiKey);
+console.log('[API:Transacoes:Config] NODE_ENV:', process.env.NODE_ENV);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -15,6 +16,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Verificar configurações críticas
+    if (!pagamentosApiUrl) {
+      throw new Error('URL da API de pagamentos não configurada');
+    }
+    if (!apiKey) {
+      throw new Error('API Key não configurada');
+    }
+
     console.log('[API:Transacoes] Iniciando busca de transações');
     console.log(`[API:Transacoes] API URL: ${pagamentosApiUrl}`);
     console.log(`[API:Transacoes] API Key presente: ${!!apiKey}`);
@@ -45,78 +54,96 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       params.search = termoBusca;
     }
     
-    console.log(`[API:Transacoes] Chamando endpoint: ${pagamentosApiUrl}/transactions/list`);
-    console.log(`[API:Transacoes] Parâmetros:`, JSON.stringify(params));
-    
-    // Configuração dos headers
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
+    // Configuração dos headers - Alterando o formato da autorização
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}` // Mudando de ApiKey para Bearer
     };
     
-    // Adicionar API key se estiver disponível
-    if (apiKey) {
-      headers['Authorization'] = `ApiKey ${apiKey}`;
+    console.log(`[API:Transacoes] Chamando endpoint: ${pagamentosApiUrl}/api/transactions/list`);
+    console.log(`[API:Transacoes] Parâmetros:`, JSON.stringify(params));
+    console.log('[API:Transacoes] Headers:', JSON.stringify({
+      ...headers,
+      'Authorization': '***MASKED***'
+    }));
+    
+    // Tentar fazer a requisição com retry
+    let retryCount = 0;
+    const maxRetries = 3;
+    let lastError = null;
+
+    while (retryCount < maxRetries) {
+      try {
+        // Ajustando o endpoint para incluir /api no path
+        const response = await axios.get(`${pagamentosApiUrl}/api/transactions/list`, {
+          params,
+          headers,
+          timeout: 10000 // 10 segundos timeout
+        });
+
+        console.log(`[API:Transacoes] Resposta recebida: ${response.status}`);
+        console.log(`[API:Transacoes] Total de transações: ${response.data.total || 0}`);
+        
+        // Verificar se a resposta tem o formato esperado
+        if (!response.data || !Array.isArray(response.data.transactions)) {
+          throw new Error(`Resposta inválida da API: ${JSON.stringify(response.data)}`);
+        }
+
+        // Mapear a resposta para o formato esperado pelo frontend
+        const transacoes = response.data.transactions.map((t: any) => ({
+          id: t.id,
+          data_criacao: t.created_at,
+          valor: t.amount,
+          status: t.status,
+          metodo_pagamento: t.method,
+          cliente_id: t.payment_request?.customer_id || '',
+          cliente_nome: t.payment_request?.customer_name || '',
+          cliente_email: t.payment_request?.customer_email || '',
+          produto_id: t.payment_request?.service_id || '',
+          produto_nome: t.payment_request?.service_name || '',
+          order_id: t.external_id || ''
+        }));
+        
+        return res.status(200).json({
+          transacoes,
+          total: response.data.total || 0,
+          debug: {
+            env: process.env.NODE_ENV,
+            apiUrl: pagamentosApiUrl,
+            hasApiKey: !!apiKey,
+            retryCount
+          }
+        });
+      } catch (error) {
+        lastError = error;
+        retryCount++;
+        
+        if (retryCount < maxRetries) {
+          console.log(`[API:Transacoes] Tentativa ${retryCount} falhou, tentando novamente...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          continue;
+        }
+        
+        throw error;
+      }
     }
     
-    console.log('[API:Transacoes] Headers:', JSON.stringify(headers, (_, v) => 
-      v === headers['Authorization'] ? '***MASKED***' : v
-    ));
-    
-    // Chamar a API de pagamentos
-    console.log('[API:Transacoes] Fazendo requisição para:', `${pagamentosApiUrl}/transactions/list`);
-    console.log('[API:Transacoes] Headers:', JSON.stringify({
-      'Content-Type': 'application/json',
-      'Authorization': `ApiKey ${apiKey ? '***MASKED***' : 'undefined'}`
-    }));
-    
-    const response = await axios.get(`${pagamentosApiUrl}/transactions/list`, {
-      params,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `ApiKey ${apiKey}`
-      }
-    }).catch(error => {
-      console.error('[API:Transacoes] Erro na requisição:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        headers: error.response?.headers
-      });
-      throw error;
-    });
-    
-    console.log(`[API:Transacoes] Resposta recebida: ${response.status}`);
-    console.log(`[API:Transacoes] Total de transações: ${response.data.total || 0}`);
-    
-    // Mapear a resposta para o formato esperado pelo frontend
-    const transacoes = (response.data.transactions || []).map((t: any) => ({
-      id: t.id,
-      data_criacao: t.created_at,
-      valor: t.amount,
-      status: t.status,
-      metodo_pagamento: t.method,
-      cliente_id: t.payment_request?.customer_id || '',
-      cliente_nome: t.payment_request?.customer_name || '',
-      cliente_email: t.payment_request?.customer_email || '',
-      produto_id: t.payment_request?.service_id || '',
-      produto_nome: t.payment_request?.service_name || '',
-      order_id: t.external_id || ''
-    }));
-    
-    res.status(200).json({
-      transacoes,
-      total: response.data.total || 0,
-      apiUrl: pagamentosApiUrl, // Adicionar URL da API na resposta para debug
-      debug: {
-        env: process.env.NODE_ENV,
-        hasApiKey: !!apiKey
-      }
-    });
   } catch (error) {
     console.error('[API:Transacoes] Erro ao processar transações:', error);
     
-    // Log detalhado do erro para depuração
     const err = error as Error | AxiosError;
+    let errorResponse: any = {
+      error: 'Erro ao buscar transações',
+      message: err.message,
+      debug: {
+        env: process.env.NODE_ENV,
+        apiUrl: pagamentosApiUrl,
+        hasApiKey: !!apiKey,
+        timestamp: new Date().toISOString()
+      },
+      transacoes: [],
+      total: 0
+    };
     
     if (axios.isAxiosError(err)) {
       if (err.response) {
@@ -125,31 +152,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           data: err.response.data,
           headers: err.response.headers
         });
+        
+        errorResponse = {
+          ...errorResponse,
+          status: err.response.status,
+          data: err.response.data,
+          code: err.code
+        };
       } else if (err.request) {
         console.error('[API:Transacoes] Erro na requisição (sem resposta):', err.request);
+        errorResponse.type = 'REQUEST_ERROR';
       } else {
         console.error('[API:Transacoes] Erro de configuração Axios:', err.message);
+        errorResponse.type = 'CONFIG_ERROR';
       }
-      
-      // Retornar mensagem adequada para o cliente
-      res.status(500).json({ 
-        error: 'Erro ao buscar transações',
-        message: err.message,
-        url: pagamentosApiUrl,
-        hasApiKey: !!apiKey,
-        code: err.code,
-        transacoes: [],
-        total: 0
-      });
-    } else {
-      console.error('[API:Transacoes] Erro genérico:', (err as Error).message);
-      
-      res.status(500).json({ 
-        error: 'Erro ao buscar transações',
-        message: (err as Error).message,
-        transacoes: [],
-        total: 0
-      });
     }
+    
+    res.status(500).json(errorResponse);
   }
 } 
