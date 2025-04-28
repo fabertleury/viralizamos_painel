@@ -230,12 +230,12 @@ function Dashboard() {
     {
       name: 'Total de Transações',
       type: 'column',
-      data: dashboardData.graficos.transacoesPorDia.map(item => item.total),
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.total || 0),
     },
     {
       name: 'Valor Aprovado',
       type: 'line',
-      data: dashboardData.graficos.transacoesPorDia.map(item => item.valorAprovado),
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.valorAprovado || 0),
     }
   ];
 
@@ -256,9 +256,15 @@ function Dashboard() {
     },
     colors: ['#48BB78', '#ECC94B', '#E53E3E'],
     xaxis: {
-      categories: dashboardData.graficos.transacoesPorDia.map(item => 
-        new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-      ),
+      categories: dashboardData.graficos.transacoesPorDia.map(item => {
+        if (!item.data) return '-';
+        try {
+          return new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        } catch (e) {
+          console.error('Erro ao formatar data:', e);
+          return '-';
+        }
+      }),
     },
     legend: {
       position: 'top' as const,
@@ -276,15 +282,15 @@ function Dashboard() {
   const statusTransacoesChartSeries = [
     {
       name: 'Aprovadas',
-      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalAprovadas)
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalAprovadas || 0)
     },
     {
       name: 'Pendentes',
-      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalPendentes)
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalPendentes || 0)
     },
     {
       name: 'Rejeitadas',
-      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalRejeitadas)
+      data: dashboardData.graficos.transacoesPorDia.map(item => item.totalRejeitadas || 0)
     }
   ];
 
@@ -318,7 +324,7 @@ function Dashboard() {
                   <StatLabel>Valor Aprovado Hoje</StatLabel>
                   <StatNumber>{formatCurrency(dashboardData.estatisticas.transacoes.hoje.valorAprovado)}</StatNumber>
                   <StatHelpText>
-                    Taxa de Aprovação: {((dashboardData.estatisticas.transacoes.hoje.valorAprovado / dashboardData.estatisticas.transacoes.hoje.valorTotal) * 100).toFixed(1)}%
+                    Taxa de Aprovação: {(dashboardData.estatisticas.transacoes.hoje.valorTotal > 0 ? ((dashboardData.estatisticas.transacoes.hoje.valorAprovado / dashboardData.estatisticas.transacoes.hoje.valorTotal) * 100) : 0).toFixed(1)}%
                   </StatHelpText>
                 </Stat>
               </StatGroup>
@@ -521,9 +527,9 @@ const normalizeData = (data: any): DashboardData => {
       pedidos: {
         total: data?.estatisticas?.pedidos?.total ?? 0,
         crescimento: data?.estatisticas?.pedidos?.crescimento ?? 0,
-        concluidos: data?.estatisticas?.pedidos?.concluidos ?? 0,
+        completados: data?.estatisticas?.pedidos?.completados ?? data?.estatisticas?.pedidos?.concluidos ?? 0,
         pendentes: data?.estatisticas?.pedidos?.pendentes ?? 0,
-        cancelados: data?.estatisticas?.pedidos?.cancelados ?? 0,
+        falhas: data?.estatisticas?.pedidos?.falhas ?? data?.estatisticas?.pedidos?.cancelados ?? 0,
       },
       usuarios: {
         total: data?.estatisticas?.usuarios?.total ?? 0,

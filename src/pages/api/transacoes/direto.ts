@@ -110,7 +110,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Consulta para contar o total de transações com os filtros aplicados
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM "transaction" t
+      FROM "transactions" t
       LEFT JOIN "payment_request" pr ON t.payment_request_id = pr.id
       ${whereClause}
     `;
@@ -122,7 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const transacoesQuery = await pagamentosPool.query(`
       SELECT t.id, t.external_id, t.amount, t.status, t.method, t.created_at,
              pr.customer_name, pr.customer_email, pr.service_name
-      FROM "transaction" t
+      FROM "transactions" t
       LEFT JOIN "payment_request" pr ON t.payment_request_id = pr.id
       ${whereClause}
       ORDER BY t.created_at DESC
