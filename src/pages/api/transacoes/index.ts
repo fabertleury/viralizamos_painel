@@ -63,12 +63,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ));
     
     // Chamar a API de pagamentos
+    console.log('[API:Transacoes] Fazendo requisição para:', `${pagamentosApiUrl}/transactions/list`);
+    console.log('[API:Transacoes] Headers:', JSON.stringify({
+      'Content-Type': 'application/json',
+      'Authorization': `ApiKey ${apiKey ? '***MASKED***' : 'undefined'}`
+    }));
+    
     const response = await axios.get(`${pagamentosApiUrl}/transactions/list`, {
       params,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `ApiKey ${apiKey}`
       }
+    }).catch(error => {
+      console.error('[API:Transacoes] Erro na requisição:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        headers: error.response?.headers
+      });
+      throw error;
     });
     
     console.log(`[API:Transacoes] Resposta recebida: ${response.status}`);
