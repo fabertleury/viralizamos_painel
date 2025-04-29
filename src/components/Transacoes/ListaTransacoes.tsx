@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@apollo/client';
-import { GET_TRANSACOES } from '../../graphql/queries';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
@@ -34,6 +32,9 @@ import { formatCurrency, formatDate } from '../../utils/format';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { Text } from '@chakra-ui/react';
+import { FaWhatsapp } from 'react-icons/fa';
+import { toast } from 'react-hot-toast';
+import axios from 'axios';
 
 // Define the transaction status type
 type TransacaoStatus = 'PENDENTE' | 'APROVADO' | 'ESTORNADO' | 'CANCELADO' | 'EM_ANALISE';
@@ -90,31 +91,46 @@ export default function ListaTransacoes() {
   const [metodoPagamento, setMetodoPagamento] = useState('');
   const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
+  const [sendingWhatsapp, setSendingWhatsapp] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<any>(null);
   
-  const { loading, error, data, refetch } = useQuery(GET_TRANSACOES, {
-    variables: {
-      pagina: paginaAtual,
-      limite: ITENS_POR_PAGINA,
-      busca: termoBusca || undefined,
-      status: status || undefined,
-      metodoPagamento: metodoPagamento || undefined,
-      dataInicio: dataInicio ? dataInicio.toISOString() : undefined,
-      dataFim: dataFim ? dataFim.toISOString() : undefined
-    },
-    fetchPolicy: 'network-only',
-    onError: (error) => {
-      console.error('Erro na consulta GraphQL:', error);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const params: any = {
+        pagina: paginaAtual,
+        limite: ITENS_POR_PAGINA
+      };
+      
+      if (termoBusca) params.busca = termoBusca;
+      if (status) params.status = status;
+      if (metodoPagamento) params.metodoPagamento = metodoPagamento;
+      if (dataInicio) params.dataInicio = dataInicio.toISOString();
+      if (dataFim) params.dataFim = dataFim.toISOString();
+      
+      const response = await axios.get('/api/transacoes/direto-v2', { params });
+      setData(response.data);
+    } catch (err) {
+      console.error('Erro ao buscar transações:', err);
+      setError('Erro ao buscar transações. Tente novamente mais tarde.');
+      toast.error('Erro ao buscar transações');
+    } finally {
+      setLoading(false);
     }
-  });
+  };
 
   useEffect(() => {
-    refetch();
-  }, [paginaAtual, termoBusca, status, metodoPagamento, dataInicio, dataFim, refetch]);
+    fetchData();
+  }, [paginaAtual, termoBusca, status, metodoPagamento, dataInicio, dataFim]);
 
   const handleBusca = (e: React.FormEvent) => {
     e.preventDefault();
     setPaginaAtual(1);
-    refetch();
+    fetchData();
   };
 
   const handleLimparFiltros = () => {
@@ -130,8 +146,34 @@ export default function ListaTransacoes() {
     router.push(`/transacoes/${id}`);
   };
 
+  const handleSendWhatsapp = async (transactionId: string) => {
+    try {
+      setSendingWhatsapp(transactionId);
+      
+      const response = await axios.post('/api/transacoes/send-whatsapp', {
+        transactionId
+      });
+
+      if (response.data.success) {
+        // Abrir WhatsApp Web com o número e mensagem pré-preenchidos
+        const whatsappUrl = `https://wa.me/${response.data.phone}?text=${encodeURIComponent(response.data.message)}`;
+        window.open(whatsappUrl, '_blank');
+        
+        // Copiar código PIX para área de transferência
+        navigator.clipboard.writeText(response.data.pixCode);
+        toast.success('Código PIX copiado! Abra o WhatsApp para enviar a mensagem.');
+      } else {
+        throw new Error(response.data.message || 'Erro ao buscar dados da transação');
+      }
+    } catch (error) {
+      console.error('Erro ao enviar WhatsApp:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao enviar código PIX');
+    } finally {
+      setSendingWhatsapp(null);
+    }
+  };
+
   if (error) {
-    console.error('Detalhes do erro:', error);
     return (
       <Card className="w-full">
         <CardHeader>
@@ -140,16 +182,10 @@ export default function ListaTransacoes() {
         <CardContent>
           <div className="text-red-500 p-4 border border-red-200 rounded bg-red-50">
             <h3 className="text-lg font-medium mb-2">Erro ao carregar transações</h3>
-            <p>{error.message}</p>
-            {error.graphQLErrors?.map((err, i) => (
-              <p key={i} className="mt-1 text-sm">GraphQL: {err.message}</p>
-            ))}
-            {error.networkError && (
-              <p className="mt-1 text-sm">Network: {error.networkError.message}</p>
-            )}
+            <p>{error}</p>
             <Button 
               className="mt-4" 
-              onClick={() => refetch()}
+              onClick={fetchData}
               variant="outline"
             >
               Tentar novamente
@@ -160,9 +196,9 @@ export default function ListaTransacoes() {
     );
   }
 
-  const transacoes = data?.transacoes?.transacoes || [];
-  const totalItems = data?.transacoes?.total || 0;
-  const totalPaginas = Math.ceil(totalItems / ITENS_POR_PAGINA);
+  const transacoes = data?.transacoes || [];
+  const totalItems = data?.total || 0;
+  const totalPaginas = data?.totalPaginas || 0;
 
   return (
     <Card className="w-full">
@@ -325,6 +361,29 @@ export default function ListaTransacoes() {
                         </TableCell>
                         <TableCell className="text-right">
                           {formatDistanceToNow(new Date(transacao.dataCriacao), { addSuffix: true, locale: ptBR })}
+                        </TableCell>
+                        <TableCell>
+                          {transacao.status === 'PENDENTE' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={`bg-green-500 hover:bg-green-600 text-white flex items-center gap-2 ${
+                                sendingWhatsapp === transacao.id ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
+                              disabled={sendingWhatsapp === transacao.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendWhatsapp(transacao.id);
+                              }}
+                            >
+                              {sendingWhatsapp === transacao.id ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <FaWhatsapp />
+                              )}
+                              Enviar PIX
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
