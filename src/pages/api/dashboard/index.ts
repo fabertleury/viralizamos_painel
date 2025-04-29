@@ -1,83 +1,55 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
-
 // Conexão com o banco de dados de pedidos
-let ordersPool;
-try {
-  console.log('Conectando ao banco de dados de pedidos (ORDERS_DATABASE_URL):', 
-             process.env.ORDERS_DATABASE_URL?.substring(0, 35) + '...');
-  
-  ordersPool = new Pool({
-    connectionString: process.env.ORDERS_DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-  });
-  
-  // Verificar conexão
-  ordersPool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-      console.error('Erro ao conectar ao banco de dados de pedidos:', err.message);
-    } else {
-      console.log('Conexão com banco de dados de pedidos estabelecida com sucesso!');
-    }
-  });
-} catch (error) {
-  console.error('Erro ao inicializar pool de conexão de pedidos:', error);
-  ordersPool = {
-    query: () => Promise.reject(new Error('Conexão de banco de dados não disponível'))
-  };
-}
+const ordersPool = new Pool({
+  connectionString: process.env.ORDERS_DATABASE_URL || 'postgresql://postgres:cgbdNabKzdmLNJWfXAGgNFqjwpwouFXZ@switchyard.proxy.rlwy.net:44974/railway',
+  ssl: { rejectUnauthorized: false },
+  max: 5, // Reduzido para 5 conexões máximas como no script de teste
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
+  keepAlive: true
+});
+
+// Verificar conexão inicial com o banco de dados de orders
+ordersPool.on('error', (err) => {
+  console.error('[API:Dashboard:Pool] Erro no pool de conexão de orders:', err.message);
+});
+
+console.log('[API:Dashboard:Init] Pool de conexão de orders inicializado com a abordagem do script de teste');
 
 // Conexão com o banco de dados de pagamentos
-let pagamentosPool;
-try {
-  console.log('Conectando ao banco de dados de pagamentos (PAGAMENTOS_DATABASE_URL):', 
-             process.env.PAGAMENTOS_DATABASE_URL?.substring(0, 35) + '...');
-  
-  pagamentosPool = new Pool({
-    connectionString: process.env.PAGAMENTOS_DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-  });
-  
-  // Verificar conexão
-  pagamentosPool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-      console.error('Erro ao conectar ao banco de dados de pagamentos:', err.message);
-    } else {
-      console.log('Conexão com banco de dados de pagamentos estabelecida com sucesso!');
-    }
-  });
-} catch (error) {
-  console.error('Erro ao inicializar pool de conexão de pagamentos:', error);
-  pagamentosPool = {
-    query: () => Promise.reject(new Error('Conexão de banco de dados não disponível'))
-  };
-}
+const pagamentosPool = new Pool({
+  connectionString: process.env.PAGAMENTOS_DATABASE_URL || 'postgresql://postgres:zacEqGceWerpWpBZZqttjamDOCcdhRbO@shinkansen.proxy.rlwy.net:29036/railway',
+  ssl: { rejectUnauthorized: false },
+  max: 5, // Reduzido para 5 conexões máximas como no script de teste
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
+  keepAlive: true
+});
+
+// Verificar conexão inicial com o banco de dados de pagamentos
+pagamentosPool.on('error', (err) => {
+  console.error('[API:Dashboard:Pool] Erro no pool de conexão de pagamentos:', err.message);
+});
+
+console.log('[API:Dashboard:Init] Pool de conexão de pagamentos inicializado com a abordagem do script de teste');
 
 // Conexão com o banco de dados principal
-let mainPool;
-try {
-  console.log('Conectando ao banco de dados principal (DATABASE_URL):', 
-             process.env.DATABASE_URL?.substring(0, 35) + '...');
-  
-  mainPool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-  });
-  
-  // Verificar conexão
-  mainPool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-      console.error('Erro ao conectar ao banco de dados principal:', err.message);
-    } else {
-      console.log('Conexão com banco de dados principal estabelecida com sucesso!');
-    }
-  });
-} catch (error) {
-  console.error('Erro ao inicializar pool de conexão principal:', error);
-  mainPool = {
-    query: () => Promise.reject(new Error('Conexão de banco de dados não disponível'))
-  };
-}
+const mainPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 5, // Reduzido para 5 conexões máximas como no script de teste
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
+  keepAlive: true
+});
+
+// Verificar conexão inicial com o banco de dados principal
+mainPool.on('error', (err) => {
+  console.error('[API:Dashboard:Pool] Erro no pool de conexão principal:', err.message);
+});
+
+console.log('[API:Dashboard:Init] Pool de conexão principal inicializado com a abordagem do script de teste');
 
 // Função para calcular o crescimento percentual
 function calcularCrescimento(atual: number, anterior: number): number {
@@ -315,6 +287,7 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
 
 async function obterTransacoesPorPeriodo(dias: number = 7) {
   try {
+    // Abordagem baseada no script de teste que funcionou
     // Obter a data atual no fuso horário de São Paulo
     const hoje = new Date();
     const dataHojeBrasil = hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -341,6 +314,7 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
     
     console.log(`[Dashboard] Data de fim do período: ${dataFimFormatada}`);
     
+    // Usar a abordagem que funcionou no script de teste
     const query = `
       SELECT 
         DATE(created_at) as data,
@@ -375,6 +349,49 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
       valorAprovado: parseFloat(row.valor_aprovado || '0'),
       valorTotal: parseFloat(row.valor_total || '0')
     }));
+    
+    // Verificar se o dia atual está presente nos resultados
+    const diaAtualPresente = transacoes.some(t => t.data === dataFormatada);
+    
+    // Se o dia atual não estiver presente, adicionar com os dados do dia
+    if (!diaAtualPresente) {
+      console.log(`[Dashboard] Dia atual (${dataFormatada}) não encontrado nos resultados, obtendo dados separadamente`);
+      
+      // Obter dados do dia atual separadamente
+      const queryHoje = `
+        SELECT 
+          COUNT(*) as total,
+          COUNT(CASE WHEN status = 'approved' THEN 1 END) as total_aprovadas,
+          COUNT(CASE WHEN status = 'rejected' THEN 1 END) as total_rejeitadas,
+          COUNT(CASE WHEN status = 'pending' THEN 1 END) as total_pendentes,
+          SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_aprovado,
+          SUM(amount) as valor_total
+        FROM 
+          "transactions"
+        WHERE 
+          DATE(created_at) = '${dataFormatada}'::date
+      `;
+      
+      const resultHoje = await pagamentosPool.query(queryHoje);
+      
+      if (resultHoje.rows.length > 0) {
+        const dadosHoje = resultHoje.rows[0];
+        
+        // Adicionar o dia atual aos resultados
+        transacoes.push({
+          data: dataFormatada,
+          total: parseInt(dadosHoje.total || '0'),
+          totalAprovadas: parseInt(dadosHoje.total_aprovadas || '0'),
+          totalRejeitadas: parseInt(dadosHoje.total_rejeitadas || '0'),
+          totalPendentes: parseInt(dadosHoje.total_pendentes || '0'),
+          valorAprovado: parseFloat(dadosHoje.valor_aprovado || '0'),
+          valorTotal: parseFloat(dadosHoje.valor_total || '0')
+        });
+        
+        // Ordenar os resultados por data
+        transacoes.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+      }
+    }
     
     console.log(`Transações por período (${dias} dias):`, transacoes);
     

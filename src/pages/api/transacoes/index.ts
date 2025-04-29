@@ -57,42 +57,158 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       diretaParams.pagina = pagina;
       diretaParams.limite = limite;
       
-      // Fazer requisição para o endpoint direto V2
-      console.log('[API:Transacoes] Chamando endpoint direto-v2 com parâmetros:', diretaParams);
+      // Em vez de fazer uma chamada HTTP para o endpoint direto-v2, vamos importar e usar a lógica diretamente
+      // Esta abordagem evita problemas de rede e é mais eficiente
+      console.log('[API:Transacoes] Acessando diretamente o banco de dados com parâmetros:', diretaParams);
       
-      // Usar o caminho absoluto para evitar problemas de roteamento no servidor
-      const baseUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL}` 
-        : '';
+      // Importar o módulo Pool do pg para conexão direta com o banco de dados
+      const { Pool } = require('pg');
       
-      // Construir a URL completa
-      const apiUrl = `${baseUrl}/api/transacoes/direto-v2`;
-      console.log('[API:Transacoes] URL completa:', apiUrl);
-      
-      // Fazer a requisição com tratamento de erro melhorado
-      const response = await axios.get(apiUrl, { 
-        params: diretaParams,
-        timeout: 10000 // timeout de 10 segundos
+      // Criar conexão com o banco de dados usando a abordagem que funcionou nos testes JS
+      const pagamentosPool = new Pool({
+        connectionString: process.env.PAGAMENTOS_DATABASE_URL || 'postgresql://postgres:zacEqGceWerpWpBZZqttjamDOCcdhRbO@shinkansen.proxy.rlwy.net:29036/railway',
+        ssl: { rejectUnauthorized: false },
+        max: 5,
+        idleTimeoutMillis: 10000,
+        connectionTimeoutMillis: 5000,
+        keepAlive: true
       });
       
-      console.log('[API:Transacoes] Resposta da conexão direta V2:', response.status);
+      // Obter conexão do pool
+      const client = await pagamentosPool.connect();
       
-      if (response.data && response.data.transacoes) {
-        return res.status(200).json({
-          transacoes: response.data.transacoes,
-          total: response.data.total || response.data.transacoes.length,
-          pagina: response.data.pagina,
-          limite: response.data.limite,
-          total_paginas: response.data.total_paginas,
-          origem: 'banco_direto_v2',
-          debug: {
-            conexaoDireta: true,
-            env: process.env.NODE_ENV,
-            timestamp: new Date().toISOString()
-          }
-        });
-      } else {
-        throw new Error('Formato de resposta inválido da conexão direta V2');
+      try {
+        // Construir a consulta SQL com base nos parâmetros
+        let whereConditions = [];
+        let queryParams = [];
+        let paramIndex = 1;
+        
+        // Filtro por status
+        if (diretaParams.status && diretaParams.status !== 'todos') {
+          whereConditions.push(`t.status = $${paramIndex}`);
+          queryParams.push(diretaParams.status);
+          paramIndex++;
+        }
+        
+        // Filtro por método de pagamento
+        if (diretaParams.metodo && diretaParams.metodo !== 'todos') {
+          whereConditions.push(`t.method = $${paramIndex}`);
+          queryParams.push(diretaParams.metodo);
+          paramIndex++;
+        }
+        
+        // Busca por termo
+        if (diretaParams.termoBusca) {
+          whereConditions.push(`(
+            t.id::text ILIKE $${paramIndex} OR
+            t.external_id ILIKE $${paramIndex + 1} OR
+            t.status ILIKE $${paramIndex + 2}
+          )`);
+          const searchTerm = `%${diretaParams.termoBusca}%`;
+          queryParams.push(searchTerm, searchTerm, searchTerm);
+          paramIndex += 3;
+        }
+        
+        // Construir a cláusula WHERE
+        const whereClause = whereConditions.length > 0 
+          ? `WHERE ${whereConditions.join(' AND ')}` 
+          : '';
+        
+        // Calcular offset para paginação
+        const paginaNum = parseInt(diretaParams.pagina as string) || 1;
+        const limiteNum = parseInt(diretaParams.limite as string) || 10;
+        const offset = (paginaNum - 1) * limiteNum;
+        
+        // Consulta para contar o total de transações
+        const countQuery = `
+          SELECT COUNT(*) as total
+          FROM "transactions" t
+          LEFT JOIN "payment_requests" pr ON t.payment_request_id = pr.id
+          ${whereClause}
+        `;
+        
+        const countResult = await client.query(countQuery, queryParams);
+        const totalTransacoes = parseInt(countResult.rows[0].total);
+        
+        // Consulta principal para buscar as transações
+        const transacoesQuery = `
+          SELECT 
+            t.id, 
+            t.external_id, 
+            t.amount, 
+            t.status, 
+            t.method, 
+            t.created_at,
+            pr.customer_name, 
+            pr.customer_email, 
+            pr.service_name
+          FROM "transactions" t
+          LEFT JOIN "payment_requests" pr ON t.payment_request_id = pr.id
+          ${whereClause}
+          ORDER BY t.created_at DESC
+          LIMIT ${limiteNum} OFFSET ${offset}
+        `;
+        
+        const transacoesResult = await client.query(transacoesQuery, queryParams);
+        
+        // Calcular o total de páginas
+        const totalPaginas = Math.ceil(totalTransacoes / limiteNum);
+        
+        // Mapear as transações para o formato esperado pelo frontend
+        const transacoes = transacoesResult.rows.map(t => ({
+          id: t.id,
+          data_criacao: t.created_at,
+          valor: t.amount,
+          status: t.status,
+          metodo_pagamento: t.method,
+          cliente: {
+            nome: t.customer_name || 'Não informado',
+            email: t.customer_email || 'Não informado'
+          },
+          servico: t.service_name || 'Não informado',
+          external_id: t.external_id || ''
+        }));
+        
+        // Simular uma resposta como se fosse do endpoint direto-v2
+        const response = {
+          data: {
+            transacoes,
+            total: totalTransacoes,
+            pagina: paginaNum,
+            limite: limiteNum,
+            total_paginas: totalPaginas
+          },
+          status: 200
+        };
+      
+        console.log('[API:Transacoes] Resposta da conexão direta V2:', response.status);
+      
+        if (response.data && response.data.transacoes) {
+          // Liberar a conexão antes de retornar a resposta
+          client.release();
+          
+          return res.status(200).json({
+            transacoes: response.data.transacoes,
+            total: response.data.total || response.data.transacoes.length,
+            pagina: response.data.pagina,
+            limite: response.data.limite,
+            total_paginas: response.data.total_paginas,
+            origem: 'banco_direto_v2',
+            debug: {
+              conexaoDireta: true,
+              env: process.env.NODE_ENV,
+              timestamp: new Date().toISOString()
+            }
+          });
+        } else {
+          client.release();
+          throw new Error('Formato de resposta inválido da conexão direta V2');
+        }
+      } catch (queryError) {
+        // Liberar a conexão em caso de erro
+        client.release();
+        console.error('[API:Transacoes] Erro na execução das consultas SQL:', queryError);
+        throw queryError;
       }
     } catch (directError) {
       console.error('[API:Transacoes] Erro na conexão direta V2:', directError);
