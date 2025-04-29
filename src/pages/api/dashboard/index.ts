@@ -315,13 +315,35 @@ async function obterPedidosPorPeriodo(dias: number = 7) {
 
 async function obterTransacoesPorPeriodo(dias: number = 7) {
   try {
-    // Obter a data e hora atual no fuso horário do servidor
-    const dataAtual = new Date();
-    console.log(`[Dashboard] Data atual: ${dataAtual.toISOString()}`);
+    // Obter a data atual no fuso horário de São Paulo
+    const hoje = new Date();
+    const dataHojeBrasil = hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const [dia, mes, ano] = dataHojeBrasil.split('/');
+    const dataFormatada = `${ano}-${mes}-${dia}`;
+    
+    console.log(`[Dashboard] Data atual no fuso horário de São Paulo: ${dataFormatada}`);
+    
+    // Calcular a data de início do período (dias atrás)
+    const dataInicio = new Date(hoje);
+    dataInicio.setDate(dataInicio.getDate() - (dias - 1));
+    const dataInicioBrasil = dataInicio.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const [diaInicio, mesInicio, anoInicio] = dataInicioBrasil.split('/');
+    const dataInicioFormatada = `${anoInicio}-${mesInicio}-${diaInicio}`;
+    
+    console.log(`[Dashboard] Data de início do período: ${dataInicioFormatada}`);
+    
+    // Calcular a data de fim do período (amanhã)
+    const dataFim = new Date(hoje);
+    dataFim.setDate(dataFim.getDate() + 1);
+    const dataFimBrasil = dataFim.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const [diaFim, mesFim, anoFim] = dataFimBrasil.split('/');
+    const dataFimFormatada = `${anoFim}-${mesFim}-${diaFim}`;
+    
+    console.log(`[Dashboard] Data de fim do período: ${dataFimFormatada}`);
     
     const query = `
       SELECT 
-        DATE(created_at AT TIME ZONE 'America/Sao_Paulo') as data,
+        DATE(created_at) as data,
         COUNT(*) as total,
         COUNT(CASE WHEN status = 'approved' THEN 1 END) as total_aprovadas,
         COUNT(CASE WHEN status = 'rejected' THEN 1 END) as total_rejeitadas,
@@ -331,10 +353,10 @@ async function obterTransacoesPorPeriodo(dias: number = 7) {
       FROM 
         "transactions"
       WHERE 
-        created_at >= (CURRENT_DATE - INTERVAL '${dias - 1} days') AT TIME ZONE 'America/Sao_Paulo'
-        AND created_at < (CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'America/Sao_Paulo'
+        DATE(created_at) >= '${dataInicioFormatada}'::date
+        AND DATE(created_at) <= '${dataFormatada}'::date
       GROUP BY 
-        DATE(created_at AT TIME ZONE 'America/Sao_Paulo')
+        DATE(created_at)
       ORDER BY 
         data
     `;
@@ -455,7 +477,14 @@ async function obterAtividadesRecentes(limite: number = 10) {
 
 async function obterEstatisticasDoDia() {
   try {
-    // Usar o mesmo padrão de fuso horário que foi implementado em obterTransacoesPorPeriodo
+    // Obter a data atual no fuso horário de São Paulo
+    const hoje = new Date();
+    const dataHojeBrasil = hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const [dia, mes, ano] = dataHojeBrasil.split('/');
+    const dataFormatada = `${ano}-${mes}-${dia}`;
+    
+    console.log(`[Dashboard] Data atual no fuso horário de São Paulo: ${dataFormatada}`);
+    
     const query = `
       SELECT 
         COUNT(*) as total_transacoes,
@@ -465,7 +494,7 @@ async function obterEstatisticasDoDia() {
         SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_total_aprovado,
         SUM(amount) as valor_total
       FROM "transactions"
-      WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE AT TIME ZONE 'America/Sao_Paulo'
+      WHERE DATE(created_at) = '${dataFormatada}'::date
     `;
     
     console.log(`[Dashboard] Consulta SQL para estatísticas do dia: ${query}`);
