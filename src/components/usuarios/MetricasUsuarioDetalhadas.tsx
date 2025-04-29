@@ -34,10 +34,11 @@ import {
   Circle,
   Tooltip,
 } from '@chakra-ui/react';
-import { HiOutlineCurrencyDollar, HiOutlineShoppingCart, HiOutlineCalendar, HiOutlineClock, HiOutlineScale } from 'react-icons/hi';
+import { HiOutlineCurrencyDollar, HiOutlineShoppingCart, HiOutlineCalendar, HiOutlineClock, HiOutlineScale, HiOutlineCreditCard, HiOutlineReceiptTax } from 'react-icons/hi';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/format';
 import NextLink from 'next/link';
 import { DetailedUser, UserMetrics, fetchUserDetails } from '@/services/adminService';
+import { FiAlertCircle, FiCreditCard, FiDollarSign, FiClock } from 'react-icons/fi';
 import { FiAlertCircle } from 'react-icons/fi';
 
 interface MetricasUsuarioDetalhadasProps {
@@ -125,6 +126,9 @@ const MetricasUsuarioDetalhadas: React.FC<MetricasUsuarioDetalhadasProps> = ({ u
   }
 
   const { metrics } = detalhes;
+  
+  // Verificar se existem transações vinculadas
+  const hasTransactions = metrics.transactions && metrics.transactions.length > 0;
 
   // Status colors for orders
   const statusColors: Record<string, string> = {
@@ -302,9 +306,135 @@ const MetricasUsuarioDetalhadas: React.FC<MetricasUsuarioDetalhadasProps> = ({ u
             </Box>
           )}
         </Box>
+        
+        <Divider my={6} />
+        
+        {/* Nova seção de transações */}
+        <Box mb={6}>
+          <Heading size="sm" mb={4}>Transações Vinculadas</Heading>
+          
+          {!metrics.transactions || metrics.transactions.length === 0 ? (
+            <Text color="gray.500">Nenhuma transação vinculada a este usuário</Text>
+          ) : (
+            <Box>
+              <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={6} mb={6}>
+                <GridItem>
+                  <Stat>
+                    <Flex align="center" mb={2}>
+                      <Icon as={HiOutlineCreditCard} boxSize={5} color="teal.500" mr={2} />
+                      <StatLabel>Total de Transações</StatLabel>
+                    </Flex>
+                    <StatNumber>{metrics.transactions_count || metrics.transactions.length}</StatNumber>
+                    <StatHelpText>Transações processadas</StatHelpText>
+                  </Stat>
+                </GridItem>
+                
+                <GridItem>
+                  <Stat>
+                    <Flex align="center" mb={2}>
+                      <Icon as={HiOutlineReceiptTax} boxSize={5} color="purple.500" mr={2} />
+                      <StatLabel>Total Pago</StatLabel>
+                    </Flex>
+                    <StatNumber>{formatCurrency(metrics.total_payments || 0)}</StatNumber>
+                    <StatHelpText>Pagamentos confirmados</StatHelpText>
+                  </Stat>
+                </GridItem>
+                
+                <GridItem>
+                  <Stat>
+                    <Flex align="center" mb={2}>
+                      <Icon as={FiCreditCard} boxSize={5} color="blue.500" mr={2} />
+                      <StatLabel>Método Preferido</StatLabel>
+                    </Flex>
+                    <StatNumber fontSize="md">
+                      {metrics.preferred_payment_method || 'N/A'}
+                    </StatNumber>
+                    <StatHelpText>Método mais utilizado</StatHelpText>
+                  </Stat>
+                </GridItem>
+              </Grid>
+              
+              <Table size="sm" variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th>ID</Th>
+                    <Th>Data</Th>
+                    <Th>Método</Th>
+                    <Th isNumeric>Valor</Th>
+                    <Th>Status</Th>
+                    <Th>Pedido</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {metrics.transactions.slice(0, 5).map((transaction, index) => (
+                    <Tr key={index} _hover={{ bg: hoverBgColor }}>
+                      <Td>
+                        <Tooltip label={transaction.id || transaction.external_id}>
+                          <Text>{(transaction.id || transaction.external_id || '').substring(0, 8)}...</Text>
+                        </Tooltip>
+                      </Td>
+                      <Td>{formatDate(new Date(transaction.created_at || transaction.date))}</Td>
+                      <Td>
+                        <HStack>
+                          <Icon as={FiCreditCard} color="blue.500" />
+                          <Text>{transaction.payment_method || 'N/A'}</Text>
+                        </HStack>
+                      </Td>
+                      <Td isNumeric>
+                        <Text fontWeight="medium">{formatCurrency(transaction.amount || 0)}</Text>
+                      </Td>
+                      <Td>
+                        <Badge 
+                          colorScheme={transaction.status === 'approved' ? 'green' : 
+                                     transaction.status === 'pending' ? 'yellow' : 
+                                     transaction.status === 'rejected' ? 'red' : 'gray'}
+                          borderRadius="full"
+                        >
+                          {transaction.status === 'approved' ? 'Aprovado' : 
+                           transaction.status === 'pending' ? 'Pendente' : 
+                           transaction.status === 'rejected' ? 'Rejeitado' : transaction.status}
+                        </Badge>
+                      </Td>
+                      <Td>
+                        {transaction.order_id ? (
+                          <Link 
+                            as={NextLink} 
+                            href={`/pedidos/${transaction.order_id}`}
+                            color="blue.500"
+                            fontSize="sm"
+                          >
+                            Ver pedido
+                          </Link>
+                        ) : (
+                          <Text fontSize="sm" color="gray.500">N/A</Text>
+                        )}
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+              
+              {metrics.transactions.length > 5 && (
+                <Flex justifyContent="center" mt={4}>
+                  <Link 
+                    as={NextLink} 
+                    href={`/transacoes?user_id=${userId}`}
+                    color="blue.500"
+                    fontWeight="medium"
+                  >
+                    Ver todas as {metrics.transactions.length} transações
+                  </Link>
+                </Flex>
+              )}
+            </Box>
+          )}
+        </Box>
       </CardBody>
     </Card>
   );
 };
 
+export default MetricasUsuarioDetalhadas;
+
+{{ ... }}
 export default MetricasUsuarioDetalhadas; 

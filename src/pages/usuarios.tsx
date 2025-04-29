@@ -268,7 +268,9 @@ export default function Usuarios() {
                     <Th>Tipo</Th>
                     <Th>Cadastro</Th>
                     <Th isNumeric>Pedidos</Th>
+                    <Th isNumeric>Transações</Th>
                     <Th isNumeric>Total Gasto</Th>
+                    <Th>Última Compra</Th>
                     <Th>Status</Th>
                     <Th>Ações</Th>
                   </Tr>
@@ -295,8 +297,29 @@ export default function Usuarios() {
                         </Td>
                         <Td>{renderTipoUsuario(usuario.role || usuario.tipo)}</Td>
                         <Td>{formatarData(usuario.created_at || usuario.data_cadastro)}</Td>
-                        <Td isNumeric>{(usuario.metrics?.orders_count || usuario.total_pedidos || 0)}</Td>
-                        <Td isNumeric>{formatarValor(usuario.metrics?.total_spent || usuario.total_gasto || 0)}</Td>
+                        <Td isNumeric>
+                          <Badge colorScheme="blue">
+                            {(usuario.metrics?.orders_count || usuario.total_pedidos || 0)}
+                          </Badge>
+                        </Td>
+                        <Td isNumeric>
+                          <Badge colorScheme="purple">
+                            {(usuario.metrics?.transactions_count || 0)}
+                          </Badge>
+                        </Td>
+                        <Td isNumeric>{formatarValor((usuario.metrics?.total_spent || 0) + (usuario.metrics?.total_payments || 0))}</Td>
+                        <Td>
+                          {usuario.metrics?.last_purchase ? (
+                            <Box>
+                              <Text fontSize="sm">{formatarData(usuario.metrics.last_purchase.date)}</Text>
+                              <Badge size="sm" colorScheme={usuario.metrics.last_purchase.status === 'completed' ? 'green' : 'yellow'}>
+                                {formatarValor(usuario.metrics.last_purchase.amount)}
+                              </Badge>
+                            </Box>
+                          ) : (
+                            <Text fontSize="sm" color="gray.500">Nenhuma</Text>
+                          )}
+                        </Td>
                         <Td>
                           <FormControl display="flex" alignItems="center">
                             <Switch 
@@ -377,7 +400,7 @@ export default function Usuarios() {
                     ))
                   ) : (
                     <Tr>
-                      <Td colSpan={7} textAlign="center" py={6}>
+                      <Td colSpan={9} textAlign="center" py={6}>
                         <Text color="gray.500">Nenhum usuário encontrado</Text>
                       </Td>
                     </Tr>

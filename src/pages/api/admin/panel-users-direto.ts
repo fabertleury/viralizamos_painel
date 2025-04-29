@@ -170,6 +170,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         userEmails.add(user.email);
       }
       
+      // Tentar buscar relação entre payment_requests e transactions
+      try {
+        // Verificar a estrutura das tabelas primeiro
+        const paymentRequestsQuery = `
+          SELECT t.id as transaction_id, t.external_id, t.payment_request_id, pr.id as request_id
+          FROM "transactions" t
+          JOIN "payment_requests" pr ON t.payment_request_id = pr.id
+          LIMIT 5
+        `;
+        const paymentRequestsResult = await pagamentosPool.query(paymentRequestsQuery);
+        console.log('[API:PanelUsersDireto] Relação entre payment_requests e transactions:', paymentRequestsResult.rows);
+      } catch (error) {
+        console.error('[API:PanelUsersDireto] Erro ao buscar relação entre payment_requests e transactions:', error instanceof Error ? error.message : 'Erro desconhecido');
+      }
+      
       // Buscar último pedido
       const lastOrderQuery = `
         SELECT id, status, amount, created_at, metadata
@@ -210,61 +225,63 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let totalPayments = 0;
       let lastTransaction = null;
       let paymentMethods = [];
+      let preferredPaymentMethod = null;
       let userTransactions = [];
+      if (externalPaymentIds.length > 0 || externalTransactionIds.length > 0) {
+        try {
+          // Construir a lista de condições para a consulta
+          const conditions = [];
+          const transactionParams = [];
+          
+          // Adicionar condições para external_payment_ids
+          if (externalPaymentIds.length > 0) {
+            externalPaymentIds.forEach((id, index) => {
+              conditions.push(`external_id LIKE $${index + 1}`);
+              transactionParams.push(`%${id}%`);
+            });
+          }
+          
+          // Adicionar condições para external_transaction_ids
+          if (externalTransactionIds.length > 0) {
+            externalTransactionIds.forEach((id, index) => {
+              // Converter para número para evitar erro de tipo em operações aritméticas
+              const baseIndex = Number(externalPaymentIds.length);
+              const currentIndex = Number(index);
+              const paramIndex = baseIndex + currentIndex + 1;
+              conditions.push(`external_id LIKE $${paramIndex}`);
+              transactionParams.push(`%${id}%`);
+            });
+          }
+          
+          // Consulta para buscar transações
+          if (conditions.length > 0) {
+            const transactionsQuery = `
+              SELECT id, status, amount, method, created_at, external_id
+              FROM "transactions"
+              WHERE ${conditions.join(' OR ')}
+              ORDER BY created_at DESC
+            `;
+            
+            const transactionsResult = await pagamentosPool.query(transactionsQuery, transactionParams);
+            userTransactions = transactionsResult.rows;
+          }
+        } catch (error) {
+          console.error(`[API:PanelUsersDireto] Erro ao buscar dados de transações: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+          // Não retornar erro para o cliente, apenas continuar com os dados disponíveis
+        }
+      }
       
-      try {
-        // Construir condição para buscar transações vinculadas ao usuário
-        let externalIdConditions = [];
-        let params = [];
-        let paramIndex = 1;
+      if (userTransactions.length > 0) {
+        console.log(`[API:PanelUsersDireto] Encontradas ${userTransactions.length} transações para o usuário ${user.id}`);
         
-        // Adicionar condições para external_payment_ids
-        if (externalPaymentIds.length > 0) {
-          externalPaymentIds.forEach(id => {
-            externalIdConditions.push(`t.external_id = $${paramIndex}`);
-            params.push(id);
-            paramIndex++;
-          });
-        }
+        // Calcular métricas de transações
+        transactionsCount = userTransactions.length;
+        totalPayments = userTransactions
+          .filter(t => t.status === 'approved' || t.status === 'completed')
+          .reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
         
-        // Construir a consulta SQL com as condições
-        let transactionsQuery;
-        
-        if (externalIdConditions.length > 0) {
-          // Se temos IDs externos, buscar transações vinculadas
-          transactionsQuery = `
-            SELECT t.id, t.status, t.amount, t.method, t.created_at, t.external_id, t.payment_request_id
-            FROM "transactions" t
-            WHERE ${externalIdConditions.join(' OR ')}
-            ORDER BY t.created_at DESC
-          `;
-          
-          console.log(`[API:PanelUsersDireto] Buscando transações para o usuário ${user.id} com ${externalIdConditions.length} condições`);
-        } else {
-          // Se não temos IDs externos, buscar transações recentes
-          transactionsQuery = `
-            SELECT t.id, t.status, t.amount, t.method, t.created_at, t.external_id, t.payment_request_id
-            FROM "transactions" t
-            ORDER BY t.created_at DESC
-            LIMIT 5
-          `;
-          
-          console.log(`[API:PanelUsersDireto] Nenhum ID externo encontrado para o usuário ${user.id}, buscando transações recentes`);
-        }
-        
-        const transactionsResult = await pagamentosPool.query(transactionsQuery, params);
-        userTransactions = transactionsResult.rows;
-        
+        // Pegar a última transação (já está ordenada por data)
         if (userTransactions.length > 0) {
-          console.log(`[API:PanelUsersDireto] Encontradas ${userTransactions.length} transações para o usuário ${user.id}`);
-          
-          // Contar transações e somar valores
-          transactionsCount = userTransactions.length;
-          totalPayments = userTransactions.reduce((sum, transaction) => {
-            return sum + parseFloat(transaction.amount || '0');
-          }, 0);
-          
-          // Pegar a última transação (já está ordenada por data)
           const lastTransactionData = userTransactions[0];
           lastTransaction = {
             id: lastTransactionData.id,
@@ -274,35 +291,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             method: lastTransactionData.method,
             external_id: lastTransactionData.external_id
           };
-          
-          // Agrupar métodos de pagamento
-          const methodsMap = new Map();
-          userTransactions.forEach(transaction => {
-            const method = transaction.method || 'unknown';
-            methodsMap.set(method, (methodsMap.get(method) || 0) + 1);
-          });
-          
-          paymentMethods = Array.from(methodsMap.entries()).map(([method, count]) => ({
-            method,
-            count: count
-          })).sort((a, b) => b.count - a.count);
-        } else {
-          console.log(`[API:PanelUsersDireto] Nenhuma transação encontrada para o usuário ${user.id}`);
-          
-          // Se não encontramos transações vinculadas, buscar transações recentes para exibir
-          const recentTransactionsQuery = `
-            SELECT t.id, t.status, t.amount, t.method, t.created_at, t.external_id, t.payment_request_id
-            FROM "transactions" t
-            ORDER BY t.created_at DESC
-            LIMIT 5
-          `;
-          
-          const recentTransactionsResult = await pagamentosPool.query(recentTransactionsQuery);
-          userTransactions = recentTransactionsResult.rows;
         }
-      } catch (error) {
-        console.error(`[API:PanelUsersDireto] Erro ao buscar dados de transações: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-        // Não retornar erro para o cliente, apenas continuar com os dados disponíveis
+        
+        // Determinar o método de pagamento preferido
+        const methodsMap = userTransactions
+          .filter(t => t.method)
+          .reduce((methods: Record<string, number>, t) => {
+            const method = t.method;
+            methods[method] = (methods[method] || 0) + 1;
+            return methods;
+          }, {});
+        
+        paymentMethods = Object.entries(methodsMap).map(([method, count]) => ({
+          method,
+          count: count
+        })).sort((a, b) => b.count - a.count);
+        
+        preferredPaymentMethod = paymentMethods.length > 0 ? paymentMethods[0].method : null;
+        
+        // Buscar informações adicionais de pagamentos
+        // Nota: A tabela 'users' não existe no banco de pagamentos, então não tentaremos buscar informações de usuário lá
+        let paymentUserInfo = null;
+        try {
+          // Em vez de buscar na tabela users, vamos buscar diretamente nas transações
+          // para obter informações relevantes sobre o usuário
+          if (userTransactions.length > 0) {
+            // Extrair informações básicas da primeira transação
+            const firstTransaction = userTransactions[0];
+            paymentUserInfo = {
+              id: firstTransaction.id,
+              email: user.email, // Usar o email do usuário da tabela User do orders
+              created_at: firstTransaction.created_at,
+              transaction_count: userTransactions.length
+            };
+          }
+        } catch (error) {
+          console.error(`[API:PanelUsersDireto] Erro ao processar informações de pagamento:`, error instanceof Error ? error.message : 'Erro desconhecido');
+        } // Não retornar erro para o cliente, apenas continuar com os dados disponíveis
       }
       
       // Adicionar usuário com métricas ao array, incluindo dados de pagamentos
@@ -369,7 +394,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     };
     
-    console.log(`[API:PanelUsersDireto] Retornando ${usersWithMetrics.length} de ${totalUsers} usuários`);
+    console.log(`[API:PanelUsersDireto] Retornando ${usersWithMetrics.length} registros de usuários com métricas detalhadas`);
+    
     res.status(200).json(response);
   } catch (error) {
     console.error('[API:PanelUsersDireto] Erro ao buscar usuários:', error);
