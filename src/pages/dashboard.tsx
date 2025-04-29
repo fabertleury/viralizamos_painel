@@ -52,10 +52,24 @@ interface DashboardData {
   atividades: Array<{
     id: string;
     tipo: string;
+    icone?: string;
     usuario: string;
+    email?: string;
+    servico?: string;
     item: string;
+    descricao?: string;
     status: string;
+    status_cor?: string;
     data: string;
+    data_formatada?: string;
+    valor: number;
+    valor_formatado?: string;
+    metodo_pagamento?: string;
+    provider?: string;
+    external_id?: string;
+    external_payment_id?: string;
+    external_transaction_id?: string;
+    link?: string;
   }>;
   ultimaAtualizacao: string;
 }
@@ -454,51 +468,132 @@ function Dashboard() {
         {/* Atividade Recente */}
         <Card>
           <CardContent className="p-6">
-            <Heading as="h2" size="md" mb={4}>Atividade Recente</Heading>
+            <Flex justifyContent="space-between" alignItems="center" mb={4}>
+              <Heading as="h2" size="md">Atividade Recente</Heading>
+              <Text fontSize="sm" color="gray.500">
+                Última atualização: {formatDate(dashboardData.ultimaAtualizacao)}
+              </Text>
+            </Flex>
+            
             {dashboardData.atividades && dashboardData.atividades.length > 0 ? (
-              <Table variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th>Tipo</Th>
-                    <Th>Usuário</Th>
-                    <Th>Item</Th>
-                    <Th>Status</Th>
-                    <Th>Data</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {dashboardData.atividades.map((atividade) => (
-                    <Tr key={atividade.id}>
-                      <Td>
-                        <Badge colorScheme={
-                          atividade.tipo === 'pedido' ? 'blue' : 
-                          atividade.tipo === 'transacao' ? 'green' : 
-                          'purple'
-                        }>
-                          {atividade.tipo}
-                        </Badge>
-                      </Td>
-                      <Td>{atividade.usuario}</Td>
-                      <Td>{atividade.item}</Td>
-                      <Td>
-                        <Badge colorScheme={
-                          atividade.status === 'aprovado' || atividade.status === 'concluído' ? 'green' : 
-                          atividade.status === 'processando' ? 'blue' : 
-                          atividade.status === 'pendente' ? 'yellow' : 
-                          'red'
-                        }>
-                          {atividade.status}
-                        </Badge>
-                      </Td>
-                      <Td>{formatDate(atividade.data)}</Td>
+              <Box overflowX="auto">
+                <Table variant="simple" size="md">
+                  <Thead>
+                    <Tr>
+                      <Th>Tipo</Th>
+                      <Th>Descrição</Th>
+                      <Th>Status</Th>
+                      <Th>Valor</Th>
+                      <Th>Data/Hora</Th>
+                      <Th>Ações</Th>
                     </Tr>
-                  ))}
-                </Tbody>
-              </Table>
+                  </Thead>
+                  <Tbody>
+                    {dashboardData.atividades.map((atividade) => (
+                      <Tr key={atividade.id} _hover={{ bg: 'gray.50' }}>
+                        <Td>
+                          <Flex alignItems="center">
+                            <Badge 
+                              colorScheme={atividade.tipo === 'PEDIDO' ? 'blue' : 'green'}
+                              borderRadius="full"
+                              px={2}
+                              py={1}
+                              display="flex"
+                              alignItems="center"
+                            >
+                              {atividade.tipo === 'PEDIDO' ? (
+                                <>
+                                  <Box as="span" className="material-icons-outlined" fontSize="sm" mr={1}>
+                                    shopping_bag
+                                  </Box>
+                                  Pedido
+                                </>
+                              ) : (
+                                <>
+                                  <Box as="span" className="material-icons-outlined" fontSize="sm" mr={1}>
+                                    credit_card
+                                  </Box>
+                                  Pagamento
+                                </>
+                              )}
+                            </Badge>
+                          </Flex>
+                        </Td>
+                        
+                        <Td>
+                          <Box>
+                            <Text fontWeight="medium">{atividade.item || 'N/A'}</Text>
+                            <Text fontSize="sm" color="gray.600">
+                              {atividade.descricao || (atividade.usuario ? `Cliente: ${atividade.usuario}` : 'N/A')}
+                            </Text>
+                            {atividade.metodo_pagamento && (
+                              <Text fontSize="xs" color="gray.500">
+                                Método: {atividade.metodo_pagamento}
+                              </Text>
+                            )}
+                          </Box>
+                        </Td>
+                        
+                        <Td>
+                          <Badge 
+                            colorScheme={
+                              atividade.status_cor === 'green' ? 'green' : 
+                              atividade.status_cor === 'blue' ? 'blue' : 
+                              atividade.status_cor === 'yellow' ? 'yellow' : 
+                              atividade.status_cor === 'red' ? 'red' : 
+                              'gray'
+                            }
+                            variant="subtle"
+                            px={2}
+                            py={1}
+                            borderRadius="md"
+                          >
+                            {atividade.status || 'Desconhecido'}
+                          </Badge>
+                        </Td>
+                        
+                        <Td>
+                          <Text fontWeight="medium">
+                            {atividade.valor_formatado || formatCurrency(atividade.valor)}
+                          </Text>
+                        </Td>
+                        
+                        <Td>
+                          <Box>
+                            <Text>{atividade.data_formatada || formatDate(atividade.data)}</Text>
+                          </Box>
+                        </Td>
+                        
+                        <Td>
+                          <Flex>
+                            <Box 
+                              as="a" 
+                              href={atividade.link || `/${atividade.tipo === 'PEDIDO' ? 'pedidos' : 'transacoes'}/${atividade.id}`}
+                              className="material-icons-outlined" 
+                              color="blue.500"
+                              fontSize="20px"
+                              cursor="pointer"
+                              title="Ver detalhes"
+                              mr={2}
+                            >
+                              visibility
+                            </Box>
+                          </Flex>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </Box>
             ) : (
-              <Text textAlign="center" py={4}>Nenhuma atividade recente encontrada.</Text>
+              <Flex direction="column" align="center" justify="center" py={8} textAlign="center">
+                <Box as="span" className="material-icons-outlined" fontSize="3xl" color="gray.400" mb={2}>
+                  history
+                </Box>
+                <Text color="gray.500">Nenhuma atividade recente encontrada.</Text>
+              </Flex>
             )}
-            </CardContent>
+          </CardContent>
           </Card>
 
         {/* Informação de última atualização */}
