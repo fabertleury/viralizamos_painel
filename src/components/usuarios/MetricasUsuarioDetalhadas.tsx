@@ -39,7 +39,6 @@ import { formatCurrency, formatDate, formatNumber } from '@/utils/format';
 import NextLink from 'next/link';
 import { DetailedUser, UserMetrics, fetchUserDetails } from '@/services/adminService';
 import { FiAlertCircle, FiCreditCard, FiDollarSign, FiClock } from 'react-icons/fi';
-import { FiAlertCircle } from 'react-icons/fi';
 
 interface MetricasUsuarioDetalhadasProps {
   userId: string;
@@ -435,6 +434,3 @@ const MetricasUsuarioDetalhadas: React.FC<MetricasUsuarioDetalhadasProps> = ({ u
 };
 
 export default MetricasUsuarioDetalhadas;
-
-{{ ... }}
-export default MetricasUsuarioDetalhadas; 
