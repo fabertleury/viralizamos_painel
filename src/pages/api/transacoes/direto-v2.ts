@@ -161,7 +161,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           try {
             // Buscar pedido pelo external_id ou reference
             const orderQuery = `
-              SELECT id, metadata, status, amount, created_at
+              SELECT 
+                id, 
+                metadata, 
+                status, 
+                amount, 
+                created_at,
+                metadata->>'service_name' as service_name,
+                metadata->>'service_description' as service_description
               FROM "Order"
               WHERE metadata->>'external_payment_id' = $1
                  OR metadata->>'external_transaction_id' = $1
@@ -183,8 +190,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 telefone: transacao.customer_phone
               },
               produto: order ? {
-                nome: order.metadata?.service_name || 'Serviço não especificado',
-                descricao: order.metadata?.service_description || '',
+                nome: order.service_name || 'Serviço não especificado',
+                descricao: order.service_description || '',
                 orderId: order.id,
                 orderStatus: order.status,
                 orderAmount: order.amount,
