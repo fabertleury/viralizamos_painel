@@ -121,19 +121,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Para cada usuário, buscar suas métricas
     for (const user of usersResult.rows) {
-      // Buscar contagem de pedidos
-      const ordersCountQuery = `
-        SELECT COUNT(*) as count, SUM(amount) as total_spent
+      // Buscar pedidos do usuário com metadata
+      const ordersQuery = `
+        SELECT id, status, amount, created_at, metadata
         FROM "Order"
         WHERE user_id = $1
+        ORDER BY created_at DESC
       `;
-      const ordersCountResult = await ordersPool.query(ordersCountQuery, [user.id]);
-      const ordersCount = parseInt(ordersCountResult.rows[0].count || '0');
-      const totalSpent = parseFloat(ordersCountResult.rows[0].total_spent || '0');
+      const ordersResult = await ordersPool.query(ordersQuery, [user.id]);
+      const ordersCount = ordersResult.rows.length;
+      const totalSpent = ordersResult.rows.reduce((sum, order) => {
+        return sum + parseFloat(order.amount || '0');
+      }, 0);
+      
+      // Extrair external_payment_ids e external_transaction_ids dos pedidos
+      const externalPaymentIds = [];
+      const externalTransactionIds = [];
+      const userEmails = new Set();
+      
+      // Coletar todos os IDs externos e emails dos metadados
+      ordersResult.rows.forEach(order => {
+        try {
+          if (order.metadata) {
+            const metadata = typeof order.metadata === 'string' ? JSON.parse(order.metadata) : order.metadata;
+            
+            // Coletar external_payment_id
+            if (metadata.external_payment_id) {
+              externalPaymentIds.push(metadata.external_payment_id);
+            }
+            
+            // Coletar external_transaction_id
+            if (metadata.external_transaction_id) {
+              externalTransactionIds.push(metadata.external_transaction_id);
+            }
+            
+            // Coletar email do usuário
+            if (metadata.user_info && metadata.user_info.email) {
+              userEmails.add(metadata.user_info.email);
+            }
+          }
+        } catch (error) {
+          console.error(`[API:PanelUsersDireto] Erro ao processar metadata do pedido ${order.id}:`, error instanceof Error ? error.message : 'Erro desconhecido');
+        }
+      });
+      
+      // Adicionar o email do usuário da tabela User
+      if (user.email) {
+        userEmails.add(user.email);
+      }
       
       // Buscar último pedido
       const lastOrderQuery = `
-        SELECT id, status, amount, created_at
+        SELECT id, status, amount, created_at, metadata
         FROM "Order"
         WHERE user_id = $1
         ORDER BY created_at DESC
@@ -141,6 +180,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `;
       const lastOrderResult = await ordersPool.query(lastOrderQuery, [user.id]);
       const lastOrder = lastOrderResult.rows[0] || null;
+      
+      // Extrair informações adicionais do último pedido
+      let lastOrderMetadata = null;
+      if (lastOrder && lastOrder.metadata) {
+        try {
+          lastOrderMetadata = typeof lastOrder.metadata === 'string' ? JSON.parse(lastOrder.metadata) : lastOrder.metadata;
+        } catch (error) {
+          console.error(`[API:PanelUsersDireto] Erro ao processar metadata do último pedido:`, error instanceof Error ? error.message : 'Erro desconhecido');
+        }
+      }
       
       // Buscar serviços mais comprados
       const topServicesQuery = `
@@ -156,7 +205,107 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Calcular valor médio do pedido
       const avgOrderValue = ordersCount > 0 ? totalSpent / ordersCount : 0;
       
-      // Adicionar usuário com métricas ao array
+      // Inicializar métricas de pagamentos
+      let transactionsCount = 0;
+      let totalPayments = 0;
+      let lastTransaction = null;
+      let paymentMethods = [];
+      let userTransactions = [];
+      
+      try {
+        // Construir condição para buscar transações vinculadas ao usuário
+        let externalIdConditions = [];
+        let params = [];
+        let paramIndex = 1;
+        
+        // Adicionar condições para external_payment_ids
+        if (externalPaymentIds.length > 0) {
+          externalPaymentIds.forEach(id => {
+            externalIdConditions.push(`t.external_id = $${paramIndex}`);
+            params.push(id);
+            paramIndex++;
+          });
+        }
+        
+        // Construir a consulta SQL com as condições
+        let transactionsQuery;
+        
+        if (externalIdConditions.length > 0) {
+          // Se temos IDs externos, buscar transações vinculadas
+          transactionsQuery = `
+            SELECT t.id, t.status, t.amount, t.method, t.created_at, t.external_id, t.payment_request_id
+            FROM "transactions" t
+            WHERE ${externalIdConditions.join(' OR ')}
+            ORDER BY t.created_at DESC
+          `;
+          
+          console.log(`[API:PanelUsersDireto] Buscando transações para o usuário ${user.id} com ${externalIdConditions.length} condições`);
+        } else {
+          // Se não temos IDs externos, buscar transações recentes
+          transactionsQuery = `
+            SELECT t.id, t.status, t.amount, t.method, t.created_at, t.external_id, t.payment_request_id
+            FROM "transactions" t
+            ORDER BY t.created_at DESC
+            LIMIT 5
+          `;
+          
+          console.log(`[API:PanelUsersDireto] Nenhum ID externo encontrado para o usuário ${user.id}, buscando transações recentes`);
+        }
+        
+        const transactionsResult = await pagamentosPool.query(transactionsQuery, params);
+        userTransactions = transactionsResult.rows;
+        
+        if (userTransactions.length > 0) {
+          console.log(`[API:PanelUsersDireto] Encontradas ${userTransactions.length} transações para o usuário ${user.id}`);
+          
+          // Contar transações e somar valores
+          transactionsCount = userTransactions.length;
+          totalPayments = userTransactions.reduce((sum, transaction) => {
+            return sum + parseFloat(transaction.amount || '0');
+          }, 0);
+          
+          // Pegar a última transação (já está ordenada por data)
+          const lastTransactionData = userTransactions[0];
+          lastTransaction = {
+            id: lastTransactionData.id,
+            date: lastTransactionData.created_at,
+            status: lastTransactionData.status,
+            amount: parseFloat(lastTransactionData.amount || '0'),
+            method: lastTransactionData.method,
+            external_id: lastTransactionData.external_id
+          };
+          
+          // Agrupar métodos de pagamento
+          const methodsMap = new Map();
+          userTransactions.forEach(transaction => {
+            const method = transaction.method || 'unknown';
+            methodsMap.set(method, (methodsMap.get(method) || 0) + 1);
+          });
+          
+          paymentMethods = Array.from(methodsMap.entries()).map(([method, count]) => ({
+            method,
+            count: count
+          })).sort((a, b) => b.count - a.count);
+        } else {
+          console.log(`[API:PanelUsersDireto] Nenhuma transação encontrada para o usuário ${user.id}`);
+          
+          // Se não encontramos transações vinculadas, buscar transações recentes para exibir
+          const recentTransactionsQuery = `
+            SELECT t.id, t.status, t.amount, t.method, t.created_at, t.external_id, t.payment_request_id
+            FROM "transactions" t
+            ORDER BY t.created_at DESC
+            LIMIT 5
+          `;
+          
+          const recentTransactionsResult = await pagamentosPool.query(recentTransactionsQuery);
+          userTransactions = recentTransactionsResult.rows;
+        }
+      } catch (error) {
+        console.error(`[API:PanelUsersDireto] Erro ao buscar dados de transações: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+        // Não retornar erro para o cliente, apenas continuar com os dados disponíveis
+      }
+      
+      // Adicionar usuário com métricas ao array, incluindo dados de pagamentos
       usersWithMetrics.push({
         id: user.id,
         email: user.email,
@@ -166,6 +315,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         created_at: user.created_at,
         updated_at: user.updated_at,
         metrics: {
+          // Métricas de pedidos (orders)
           orders_count: ordersCount,
           total_spent: totalSpent,
           last_purchase: lastOrder ? {
@@ -175,11 +325,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             amount: parseFloat(lastOrder.amount || '0')
           } : null,
           top_services: topServicesResult.rows.map(service => ({
-            service_name: service.service_id, // Idealmente buscaríamos o nome do serviço
+            service_name: service.service_id,
             count: parseInt(service.count)
           })),
-          purchase_frequency: null, // Cálculo mais complexo que pode ser implementado depois
-          avg_order_value: avgOrderValue
+          avg_order_value: avgOrderValue,
+          
+          // Métricas de pagamentos
+          transactions_count: transactionsCount,
+          total_payments: totalPayments,
+          last_transaction: lastTransaction,
+          payment_methods: paymentMethods,
+          user_transactions: userTransactions.map(t => ({
+            id: t.id,
+            status: t.status,
+            amount: parseFloat(t.amount || '0'),
+            method: t.method,
+            date: t.created_at,
+            external_id: t.external_id
+          })),
+          external_payment_ids: externalPaymentIds,
+          user_emails: Array.from(userEmails),
+          last_order_metadata: lastOrderMetadata,
+          
+          // Métricas combinadas
+          total_activity: ordersCount + transactionsCount,
+          total_value: totalSpent + totalPayments
         }
       });
     }
