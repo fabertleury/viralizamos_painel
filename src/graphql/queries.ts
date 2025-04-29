@@ -89,12 +89,20 @@ export const GET_TRANSACOES = gql`
         valor
         status
         metodoPagamento
-        clienteId
-        clienteNome
-        clienteEmail
-        produtoId
-        produtoNome
+        cliente {
+          id
+          nome
+          email
+          telefone
+          documento
+        }
+        produto {
+          id
+          nome
+          descricao
+        }
         orderId
+        externalId
       }
       total
     }

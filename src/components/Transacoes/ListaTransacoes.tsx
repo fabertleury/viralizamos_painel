@@ -33,6 +33,7 @@ import { Spinner } from '../ui/spinner';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/router';
+import { Text } from '@chakra-ui/react';
 
 // Define the transaction status type
 type TransacaoStatus = 'PENDENTE' | 'APROVADO' | 'ESTORNADO' | 'CANCELADO' | 'EM_ANALISE';
@@ -46,14 +47,21 @@ interface Transacao {
   status: TransacaoStatus;
   metodoPagamento: MetodoPagamento;
   valor: number;
-  data: string;
+  dataCriacao: string;
   cliente: {
+    id: string;
     nome: string;
     email: string;
+    telefone: string;
+    documento: string;
   };
   produto: {
+    id: string;
     nome: string;
+    descricao: string;
   };
+  orderId: string;
+  externalId: string;
 }
 
 const ITENS_POR_PAGINA = 10;
@@ -251,9 +259,11 @@ export default function ListaTransacoes() {
                     <TableHead>ID</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Cliente</TableHead>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>Método Pagamento</TableHead>
+                    <TableHead>Produto</TableHead>
                     <TableHead>Valor</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Pagamento</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -268,8 +278,44 @@ export default function ListaTransacoes() {
                     transacoes.map((transacao: any) => (
                       <TableRow key={transacao.id} onClick={() => handleVerDetalhes(transacao.id)} className="cursor-pointer hover:bg-gray-50">
                         <TableCell>{transacao.id.substring(0, 8)}</TableCell>
-                        <TableCell>{transacao.cliente?.nome || 'N/A'}</TableCell>
-                        <TableCell>{transacao.produto?.nome || 'N/A'}</TableCell>
+                        <TableCell>{formatDate(transacao.dataCriacao)}</TableCell>
+                        <TableCell>
+                          <Text fontWeight="medium">{transacao.cliente.nome}</Text>
+                          {transacao.cliente.email && (
+                            <Text fontSize="xs" color="gray.500" mt={1}>
+                              {transacao.cliente.email}
+                            </Text>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {transacao.cliente.telefone ? (
+                            <div className="flex items-center gap-2">
+                              <a 
+                                href={`https://wa.me/${transacao.cliente.telefone.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-green-600 hover:text-green-700"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {transacao.cliente.telefone}
+                              </a>
+                            </div>
+                          ) : (
+                            <Text color="gray.500">Não informado</Text>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Text>{metodoPagamentoLabels[transacao.metodoPagamento as MetodoPagamento] || transacao.metodoPagamento}</Text>
+                        </TableCell>
+                        <TableCell>
+                          <Text fontWeight="medium">{transacao.produto.nome}</Text>
+                          {transacao.produto.descricao && (
+                            <Text fontSize="xs" color="gray.500" mt={1} noOfLines={2}>
+                              {transacao.produto.descricao}
+                            </Text>
+                          )}
+                        </TableCell>
+                        <TableCell>{formatCurrency(transacao.valor)}</TableCell>
                         <TableCell>
                           <Badge
                             className={statusColors[transacao.status as TransacaoStatus] || 'bg-gray-100 text-gray-800'}
@@ -277,13 +323,8 @@ export default function ListaTransacoes() {
                             {transacao.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          {metodoPagamentoLabels[transacao.metodoPagamento as MetodoPagamento] || transacao.metodoPagamento || 'N/A'}
-                        </TableCell>
-                        <TableCell>{formatCurrency(transacao.valor)}</TableCell>
-                        <TableCell>{formatDate(transacao.data)}</TableCell>
                         <TableCell className="text-right">
-                          {formatDistanceToNow(new Date(transacao.data), { addSuffix: true, locale: ptBR })}
+                          {formatDistanceToNow(new Date(transacao.dataCriacao), { addSuffix: true, locale: ptBR })}
                         </TableCell>
                       </TableRow>
                     ))

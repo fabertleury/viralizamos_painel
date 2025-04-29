@@ -20,8 +20,10 @@ import {
   useColorModeValue,
   useToast,
   Spinner,
+  Icon,
+  Link,
 } from '@chakra-ui/react';
-import { FiSearch, FiFilter, FiRefreshCw } from 'react-icons/fi';
+import { FiSearch, FiFilter, FiRefreshCw, FiWhatsapp } from 'react-icons/fi';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/router';
@@ -30,27 +32,46 @@ import axios from 'axios';
 // Interface para transações
 interface Transacao {
   id: string;
+  external_id: string;
+  reference: string;
   data_criacao: Date;
+  data_atualizacao?: Date;
   valor: number;
   status: string;
   metodo_pagamento: string;
-  cliente_id: string;
-  cliente_nome: string;
-  cliente_email: string;
-  produto_id: string;
-  produto_nome: string;
-  order_id?: string;
+  provedor?: string;
+  parcelas?: number;
+  payment_request_id?: string;
+  cliente: {
+    nome: string;
+    email: string;
+    documento?: string;
+    telefone?: string;
+  };
+  produto: {
+    id: string;
+    nome: string;
+    descricao?: string;
+  };
+  vinculacoes: {
+    order_id?: string;
+    user_id?: string;
+  };
+  metadata?: {
+    transaction?: any;
+    payment_request?: any;
+  };
 }
 
 export default function Transacoes() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const toast = useToast();
-  
+
   // Obter as cores para uso no componente - mover para fora de qualquer condicional
   const bgColor = useColorModeValue('white', 'gray.800');
   const headerBgColor = useColorModeValue('gray.50', 'gray.700');
-  
+
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [totalTransacoes, setTotalTransacoes] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,45 +80,45 @@ export default function Transacoes() {
   const [termoBusca, setTermoBusca] = useState('');
   const [pagina, setPagina] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(10);
-  
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthenticated, authLoading, router]);
-  
+
   // Função para carregar transações com filtros
   const carregarTransacoes = async () => {
     try {
       setIsLoading(true);
-      
+
       const params: any = {
         pagina,
         limite: itensPorPagina
       };
-      
+
       if (filtroStatus !== 'todos') {
         params.status = filtroStatus;
       }
-      
+
       if (filtroMetodo !== 'todos') {
         params.metodo = filtroMetodo;
       }
-      
+
       if (termoBusca) {
         params.termoBusca = termoBusca;
       }
-      
+
       // Adicionar logs para diagnóstico
       console.log('[Transacoes] Iniciando busca de transações');
       console.log('[Transacoes] Parâmetros:', params);
-      
+
       const response = await axios.get('/api/transacoes', { params });
-      
+
       console.log('[Transacoes] Resposta recebida:', response);
       console.log('[Transacoes] Total de transações:', response.data.total);
       console.log('[Transacoes] Dados retornados:', response.data);
-      
+
       if (response.data.transacoes && Array.isArray(response.data.transacoes)) {
         console.log('[Transacoes] Número de transações recebidas:', response.data.transacoes.length);
         setTransacoes(response.data.transacoes);
@@ -129,46 +150,46 @@ export default function Transacoes() {
       setIsLoading(false);
     }
   };
-  
+
   // Carregar transações quando os filtros ou a página mudarem
   useEffect(() => {
     if (isAuthenticated) {
       carregarTransacoes();
     }
   }, [isAuthenticated, pagina, itensPorPagina]);
-  
+
   // Função para aplicar filtros
   const aplicarFiltros = () => {
     setPagina(1); // Resetar para a primeira página ao filtrar
     carregarTransacoes();
   };
-  
+
   // Função para formatar data
   const formatarData = (dataISO: Date) => {
     if (!dataISO) return '-';
-    
+
     const data = new Date(dataISO);
     return data.toLocaleDateString('pt-BR') + ' ' + data.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit'
     });
   };
-  
+
   // Formatação de valor monetário
   const formatarValor = (valor: number) => {
     if (valor === undefined || valor === null) return 'R$ 0,00';
-    
+
     return valor.toLocaleString('pt-BR', {
       style: 'currency',
       currency: 'BRL',
     });
   };
-  
+
   // Função para exibir o status com a cor adequada
   const renderStatus = (status: string) => {
     let color = 'gray';
     let texto = 'Desconhecido';
-    
+
     switch (status.toLowerCase()) {
       case 'aprovado':
       case 'approved':
@@ -200,20 +221,20 @@ export default function Transacoes() {
       default:
         texto = status;
     }
-    
+
     return <Badge colorScheme={color}>{texto}</Badge>;
   };
-  
+
   // Calcular número total de páginas
   const totalPaginas = Math.ceil(totalTransacoes / itensPorPagina);
-  
+
   // Ir para a próxima página
   const proximaPagina = () => {
     if (pagina < totalPaginas) {
       setPagina(pagina + 1);
     }
   };
-  
+
   // Ir para a página anterior
   const paginaAnterior = () => {
     if (pagina > 1) {
@@ -235,10 +256,10 @@ export default function Transacoes() {
         <Heading as="h1" size="xl" mb={6}>
           Transações
         </Heading>
-        
-        <Flex 
-          direction={{ base: 'column', md: 'row' }} 
-          justify="space-between" 
+
+        <Flex
+          direction={{ base: 'column', md: 'row' }}
+          justify="space-between"
           align={{ base: 'stretch', md: 'center' }}
           mb={6}
           gap={4}
@@ -247,15 +268,15 @@ export default function Transacoes() {
             <InputLeftElement pointerEvents="none">
               <FiSearch color="gray.300" />
             </InputLeftElement>
-            <Input 
-              placeholder="Buscar por ID, cliente ou email" 
+            <Input
+              placeholder="Buscar por ID, cliente ou email"
               value={termoBusca}
               onChange={(e) => setTermoBusca(e.target.value)}
             />
           </InputGroup>
-          
+
           <HStack spacing={4}>
-            <Select 
+            <Select
               maxW="180px"
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value)}
@@ -267,8 +288,8 @@ export default function Transacoes() {
               <option value="estornado">Estornado</option>
               <option value="em_analise">Em Análise</option>
             </Select>
-            
-            <Select 
+
+            <Select
               maxW="180px"
               value={filtroMetodo}
               onChange={(e) => setFiltroMetodo(e.target.value)}
@@ -278,8 +299,8 @@ export default function Transacoes() {
               <option value="boleto">Boleto</option>
               <option value="pix">Pix</option>
             </Select>
-            
-            <Button 
+
+            <Button
               colorScheme="brand"
               onClick={aplicarFiltros}
               leftIcon={<FiFilter />}
@@ -287,7 +308,7 @@ export default function Transacoes() {
             >
               Filtrar
             </Button>
-            
+
             <Button
               variant="outline"
               leftIcon={<FiRefreshCw />}
@@ -298,7 +319,7 @@ export default function Transacoes() {
             </Button>
           </HStack>
         </Flex>
-        
+
         <Box
           overflowX="auto"
           bg={bgColor}
@@ -311,6 +332,7 @@ export default function Transacoes() {
                 <Th>ID</Th>
                 <Th>Data</Th>
                 <Th>Cliente</Th>
+                <Th>Contato</Th>
                 <Th>Método</Th>
                 <Th>Produto</Th>
                 <Th isNumeric>Valor</Th>
@@ -327,12 +349,63 @@ export default function Transacoes() {
                 </Tr>
               ) : transacoes.length > 0 ? (
                 transacoes.map((transacao) => (
-                  <Tr key={transacao.id}>
-                    <Td fontFamily="mono">{transacao.id}</Td>
+                  <Tr key={transacao.id} _hover={{ bg: 'gray.50', cursor: 'pointer' }} onClick={() => router.push(`/transacoes/${transacao.id}`)}>
+                    <Td fontFamily="mono">
+                      <Text noOfLines={1} maxW="150px">{transacao.id}</Text>
+                      {transacao.external_id && (
+                        <Text fontSize="xs" color="gray.500" mt={1} noOfLines={1}>
+                          Ext: {transacao.external_id.substring(0, 12)}{transacao.external_id.length > 12 ? '...' : ''}
+                        </Text>
+                      )}
+                    </Td>
                     <Td>{formatarData(transacao.data_criacao)}</Td>
-                    <Td>{transacao.cliente_nome || transacao.cliente_id}</Td>
-                    <Td>{transacao.metodo_pagamento}</Td>
-                    <Td>{transacao.produto_nome || '-'}</Td>
+                    <Td>
+                      <Text fontWeight="medium">{transacao.cliente.nome}</Text>
+                      {transacao.cliente.email && (
+                        <Text fontSize="xs" color="gray.500" mt={1}>
+                          {transacao.cliente.email}
+                        </Text>
+                      )}
+                    </Td>
+                    <Td>
+                      {transacao.cliente.telefone ? (
+                        <HStack>
+                          <Icon as={FiWhatsapp} color="green.500" />
+                          <Link 
+                            href={`https://wa.me/${transacao.cliente.telefone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            color="green.500"
+                            _hover={{ textDecoration: 'underline' }}
+                          >
+                            {transacao.cliente.telefone}
+                          </Link>
+                        </HStack>
+                      ) : (
+                        <Text color="gray.500">Não informado</Text>
+                      )}
+                    </Td>
+                    <Td>
+                      <Text>{transacao.metodo_pagamento}</Text>
+                      {transacao.parcelas && transacao.parcelas > 1 && (
+                        <Text fontSize="xs" color="gray.500">
+                          {transacao.parcelas}x
+                        </Text>
+                      )}
+                    </Td>
+                    <Td>
+                      <Text noOfLines={1}>{transacao.produto.nome}</Text>
+                      {transacao.produto.descricao && (
+                        <Text fontSize="xs" color="gray.500" mt={1} noOfLines={2}>
+                          {transacao.produto.descricao}
+                        </Text>
+                      )}
+                      {transacao.vinculacoes.order_id && (
+                        <Text fontSize="xs" color="blue.500" mt={1}>
+                          Pedido: {transacao.vinculacoes.order_id.substring(0, 8)}
+                        </Text>
+                      )}
+                    </Td>
                     <Td isNumeric>{formatarValor(transacao.valor)}</Td>
                     <Td>{renderStatus(transacao.status)}</Td>
                   </Tr>

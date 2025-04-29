@@ -118,18 +118,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       console.log(`[API:TransacoesDiretoV2] Total de transações encontradas: ${totalTransacoes}`);
       
-      // Consulta principal para buscar as transações com paginação
+      // Consulta principal para buscar as transações com paginação e mais dados
       const transacoesQuery = `
         SELECT 
           t.id, 
           t.external_id, 
+          t.reference,
           t.amount, 
           t.status, 
-          t.method, 
+          t.method,
+          t.provider,
+          t.installments,
           t.created_at,
+          t.updated_at,
+          t.payment_request_id,
+          t.metadata as transaction_metadata,
+          pr.id as payment_request_id,
           pr.customer_name, 
-          pr.customer_email, 
-          pr.service_name
+          pr.customer_email,
+          pr.customer_document,
+          pr.customer_phone,
+          pr.service_id,
+          pr.service_name,
+          pr.service_description,
+          pr.metadata as payment_request_metadata
         FROM "transactions" t
         LEFT JOIN "payment_requests" pr ON t.payment_request_id = pr.id
         ${whereClause}
@@ -143,18 +155,70 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       console.log(`[API:TransacoesDiretoV2] Transações recuperadas: ${transacoesResult.rows.length}`);
       
-      // Mapear as transações para o formato esperado pelo frontend
-      const transacoes = transacoesResult.rows.map(t => ({
-        id: t.id,
-        data_criacao: t.created_at,
-        valor: t.amount,
-        status: t.status,
-        metodo_pagamento: t.method,
-        cliente_nome: t.customer_name || '',
-        cliente_email: t.customer_email || '',
-        produto_nome: t.service_name || '',
-        order_id: t.external_id || ''
-      }));
+      // Mapear as transações para o formato esperado pelo frontend com mais dados
+      const transacoes = transacoesResult.rows.map(t => {
+        // Extrair informações do metadata se disponível
+        let metadataInfo = { order_id: null, user_id: null };
+        try {
+          if (t.transaction_metadata) {
+            const metadata = typeof t.transaction_metadata === 'string' 
+              ? JSON.parse(t.transaction_metadata) 
+              : t.transaction_metadata;
+            
+            metadataInfo.order_id = metadata.order_id;
+            metadataInfo.user_id = metadata.user_id;
+          }
+          
+          if (t.payment_request_metadata) {
+            const prMetadata = typeof t.payment_request_metadata === 'string'
+              ? JSON.parse(t.payment_request_metadata)
+              : t.payment_request_metadata;
+              
+            if (!metadataInfo.order_id && prMetadata.order_id) {
+              metadataInfo.order_id = prMetadata.order_id;
+            }
+            
+            if (!metadataInfo.user_id && prMetadata.user_id) {
+              metadataInfo.user_id = prMetadata.user_id;
+            }
+          }
+        } catch (e) {
+          console.error('[API:TransacoesDiretoV2] Erro ao processar metadata:', e);
+        }
+        
+        return {
+          id: t.id,
+          external_id: t.external_id || '',
+          reference: t.reference || '',
+          data_criacao: t.created_at,
+          data_atualizacao: t.updated_at,
+          valor: t.amount,
+          status: t.status,
+          metodo_pagamento: t.method,
+          provedor: t.provider,
+          parcelas: t.installments,
+          payment_request_id: t.payment_request_id,
+          cliente: {
+            nome: t.customer_name || 'Não informado',
+            email: t.customer_email || 'Não informado',
+            documento: t.customer_document || '',
+            telefone: t.customer_phone || ''
+          },
+          produto: {
+            id: t.service_id || '',
+            nome: t.service_name || 'Não informado',
+            descricao: t.service_description || ''
+          },
+          vinculacoes: {
+            order_id: metadataInfo.order_id || t.external_id || '',
+            user_id: metadataInfo.user_id || ''
+          },
+          metadata: {
+            transaction: t.transaction_metadata,
+            payment_request: t.payment_request_metadata
+          }
+        };
+      });
       
       // Resposta com dados reais e informações de paginação
       const response = {

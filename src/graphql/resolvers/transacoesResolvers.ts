@@ -73,12 +73,20 @@ export const transacoesResolvers = {
           valor: t.amount,
           status: t.status.toUpperCase(),
           metodoPagamento: t.method.toUpperCase(),
-          clienteId: t.payment_request?.customer_id || '',
-          clienteNome: t.payment_request?.customer_name || '',
-          clienteEmail: t.payment_request?.customer_email || '',
-          produtoId: t.payment_request?.service_id || '',
-          produtoNome: t.payment_request?.service_name || '',
-          orderId: t.external_id || ''
+          cliente: {
+            id: t.payment_request?.customer_id || '',
+            nome: t.payment_request?.customer_name || '',
+            email: t.payment_request?.customer_email || '',
+            telefone: t.payment_request?.customer_phone || '',
+            documento: t.payment_request?.customer_document || ''
+          },
+          produto: {
+            id: t.payment_request?.service_id || '',
+            nome: t.payment_request?.service_name || '',
+            descricao: t.payment_request?.service_description || ''
+          },
+          orderId: t.external_id || '',
+          externalId: t.external_id || ''
         }));
         
         return {
