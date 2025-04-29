@@ -87,22 +87,34 @@ export async function fetchDetailedUsers(
       'Content-Type': 'application/json'
     };
     
-    // Tentar primeiro com a API de orders
+    // Tentar primeiro com a API direta (mais confiável)
     try {
-      console.log('Tentando acessar a API de orders com token de autorização');
-      const response = await ordersApi.get(`/api/api/admin/panel-users?${params.toString()}`, {
+      console.log('Tentando acessar a API direta de usuários com token de autorização');
+      const response = await axios.get(`/api/admin/panel-users-direto?${params.toString()}`, {
         headers: headers
       });
       return response.data;
-    } catch (ordersError) {
-      console.error('Erro ao buscar usuários via API de orders:', ordersError);
+    } catch (directError) {
+      console.error('Erro ao buscar usuários via API direta:', directError);
       
-      // Fallback para API local
-      console.log('Tentando acessar a API local com token de autorização');
-      const response = await axios.get(`/api/admin/panel-users?${params.toString()}`, {
-        headers: headers
-      });
-      return response.data;
+      // Tentar com a API de orders como fallback
+      try {
+        console.log('Tentando acessar a API de orders com token de autorização');
+        // Corrigir a URL da API de orders (remover /api duplicado)
+        const response = await ordersApi.get(`/api/admin/panel-users?${params.toString()}`, {
+          headers: headers
+        });
+        return response.data;
+      } catch (ordersError) {
+        console.error('Erro ao buscar usuários via API de orders:', ordersError);
+        
+        // Fallback para API local padrão
+        console.log('Tentando acessar a API local padrão com token de autorização');
+        const response = await axios.get(`/api/admin/panel-users?${params.toString()}`, {
+          headers: headers
+        });
+        return response.data;
+      }
     }
   } catch (error) {
     console.error('Erro ao buscar usuários detalhados:', error);
@@ -132,22 +144,34 @@ export async function fetchUserDetails(userId: string): Promise<DetailedUser> {
     
     console.log(`Buscando detalhes do usuário: ${userId}`);
     
-    // Tentar primeiro com a API de orders
+    // Tentar primeiro com a API direta (mais confiável)
     try {
-      console.log('Tentando acessar a API de orders para detalhes do usuário');
-      const response = await ordersApi.get(`/api/api/admin/panel-users/user/${userId}`, {
+      console.log('Tentando acessar a API direta para detalhes do usuário');
+      const response = await axios.get(`/api/admin/panel-users-direto/${userId}`, {
         headers: headers
       });
       return response.data;
-    } catch (ordersError) {
-      console.error('Erro ao buscar detalhes do usuário via API de orders:', ordersError);
+    } catch (directError) {
+      console.error('Erro ao buscar detalhes do usuário via API direta:', directError);
       
-      // Fallback para API local
-      console.log('Tentando acessar a API local para detalhes do usuário');
-      const response = await axios.get(`/api/usuarios/${userId}/detalhes`, {
-        headers: headers
-      });
-      return response.data;
+      // Tentar com a API de orders como fallback
+      try {
+        console.log('Tentando acessar a API de orders para detalhes do usuário');
+        // Corrigir a URL da API de orders (remover /api duplicado)
+        const response = await ordersApi.get(`/api/admin/panel-users/user/${userId}`, {
+          headers: headers
+        });
+        return response.data;
+      } catch (ordersError) {
+        console.error('Erro ao buscar detalhes do usuário via API de orders:', ordersError);
+        
+        // Fallback para API local
+        console.log('Tentando acessar a API local para detalhes do usuário');
+        const response = await axios.get(`/api/usuarios/${userId}/detalhes`, {
+          headers: headers
+        });
+        return response.data;
+      }
     }
   } catch (error) {
     console.error('Erro ao buscar detalhes do usuário:', error);

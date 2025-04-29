@@ -82,16 +82,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         queryParams.push(metodo);
       }
       
-      // Busca por termo (ID, nome do cliente, email ou serviço)
+      // Busca por termo (ID, external_id, ou status)
       if (termoBusca) {
         whereConditions.push(`(
           t.id::text ILIKE $${queryParams.length + 1} OR
-          pr.customer_name ILIKE $${queryParams.length + 2} OR
-          pr.customer_email ILIKE $${queryParams.length + 3} OR
-          pr.service_name ILIKE $${queryParams.length + 4}
+          t.external_id ILIKE $${queryParams.length + 2} OR
+          t.status ILIKE $${queryParams.length + 3}
         )`);
         const searchTerm = `%${termoBusca}%`;
-        queryParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
+        queryParams.push(searchTerm, searchTerm, searchTerm);
       }
       
       // Construir a cláusula WHERE
@@ -108,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const countQuery = `
         SELECT COUNT(*) as total
         FROM "transactions" t
-        LEFT JOIN "payment_request" pr ON t.payment_request_id = pr.id
+        LEFT JOIN "payment_requests" pr ON t.payment_request_id = pr.id
         ${whereClause}
       `;
       
@@ -132,7 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           pr.customer_email, 
           pr.service_name
         FROM "transactions" t
-        LEFT JOIN "payment_request" pr ON t.payment_request_id = pr.id
+        LEFT JOIN "payment_requests" pr ON t.payment_request_id = pr.id
         ${whereClause}
         ORDER BY t.created_at DESC
         LIMIT ${limiteNum} OFFSET ${offset}
