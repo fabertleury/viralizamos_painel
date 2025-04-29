@@ -4,25 +4,49 @@ import { Pool } from 'pg';
 // Conexão com o banco de dados de pagamentos
 const pagamentosPool = new Pool({
   connectionString: 'postgresql://postgres:zacEqGceWerpWpBZZqttjamDOCcdhRbO@shinkansen.proxy.rlwy.net:29036/railway',
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+  application_name: 'viralizamos_painel_transacoes'
 });
 
 // Conexão com o banco de dados de pedidos (orders)
 const ordersPool = new Pool({
   connectionString: 'postgresql://postgres:cgbdNabKzdmLNJWfXAGgNFqjwpwouFXZ@switchyard.proxy.rlwy.net:44974/railway',
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+  application_name: 'viralizamos_painel_orders'
 });
 
 // Verificar conexão inicial
 pagamentosPool.on('error', (err) => {
-  console.error('[API:TransacoesDiretoV2:Pool] Erro no pool de conexão:', err.message);
+  console.error('[API:TransacoesDiretoV2] Erro no pool de pagamentos:', err.message);
 });
 
 ordersPool.on('error', (err) => {
-  console.error('[API:TransacoesDiretoV2:OrdersPool] Erro no pool de conexão:', err.message);
+  console.error('[API:TransacoesDiretoV2] Erro no pool de orders:', err.message);
 });
 
-console.log('[API:TransacoesDiretoV2:Init] Pools de conexão inicializados com as URLs diretas');
+// Função para testar a conexão
+async function testConnection(pool: Pool, name: string) {
+  try {
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    console.log(`[API:TransacoesDiretoV2] Conexão com ${name} estabelecida com sucesso`);
+  } catch (error) {
+    console.error(`[API:TransacoesDiretoV2] Erro ao conectar com ${name}:`, error);
+  }
+}
+
+// Testar conexões na inicialização
+testConnection(pagamentosPool, 'banco de pagamentos');
+testConnection(ordersPool, 'banco de orders');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -32,11 +56,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { pagina = 1, limite = 10, busca, status, metodoPagamento, dataInicio, dataFim } = req.query;
 
-    // Obter conexão do pool
-    const client = await pagamentosPool.connect();
+    // Obter conexão do pool de pagamentos com timeout
+    const pagamentosClient = await Promise.race([
+      pagamentosPool.connect(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout ao conectar com o banco de pagamentos')), 5000)
+      )
+    ]) as any;
+
+    // Obter conexão do pool de orders com timeout
+    const ordersClient = await Promise.race([
+      ordersPool.connect(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout ao conectar com o banco de orders')), 5000)
+      )
+    ]) as any;
 
     try {
-      // Construir a query base
+      // Construir a query base para transações
       let query = `
         SELECT 
           t.id,
@@ -105,43 +142,94 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
       params.push(Number(limite), (Number(pagina) - 1) * Number(limite));
 
-      // Executar query
-      const result = await client.query(query, params);
+      // Executar query de transações com timeout
+      const result = await Promise.race([
+        pagamentosClient.query(query, params),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout ao executar query de transações')), 10000)
+        )
+      ]);
 
       // Contar total de registros
       const countQuery = query.replace(/SELECT.*?FROM/, 'SELECT COUNT(*) FROM').split('ORDER BY')[0];
-      const countResult = await client.query(countQuery, params.slice(0, -2));
+      const countResult = await pagamentosClient.query(countQuery, params.slice(0, -2));
       const total = parseInt(countResult.rows[0].count);
 
-      // Formatar resposta
-      const transacoes = result.rows.map(transacao => ({
-        id: transacao.id,
-        status: transacao.status,
-        metodoPagamento: transacao.payment_method,
-        valor: transacao.amount,
-        dataCriacao: transacao.data_criacao,
-        cliente: {
-          nome: transacao.customer_name,
-          email: transacao.customer_email,
-          telefone: transacao.customer_phone
-        },
-        produto: {
-          nome: transacao.metadata?.service_name || 'Serviço não especificado',
-          descricao: transacao.metadata?.service_description || ''
-        },
-        pixCode: transacao.pix_code,
-        pixQrCode: transacao.pix_qr_code
-      }));
+      // Buscar informações dos pedidos para cada transação
+      const transacoesComPedidos = await Promise.all(
+        result.rows.map(async (transacao) => {
+          try {
+            // Buscar pedido pelo external_id ou reference
+            const orderQuery = `
+              SELECT id, metadata, status, amount, created_at
+              FROM "Order"
+              WHERE metadata->>'external_payment_id' = $1
+                 OR metadata->>'external_transaction_id' = $1
+              LIMIT 1
+            `;
+            
+            const orderResult = await ordersClient.query(orderQuery, [transacao.external_id || transacao.reference]);
+            const order = orderResult.rows[0];
+
+            return {
+              id: transacao.id,
+              status: transacao.status,
+              metodoPagamento: transacao.payment_method,
+              valor: transacao.amount,
+              dataCriacao: transacao.data_criacao,
+              cliente: {
+                nome: transacao.customer_name,
+                email: transacao.customer_email,
+                telefone: transacao.customer_phone
+              },
+              produto: order ? {
+                nome: order.metadata?.service_name || 'Serviço não especificado',
+                descricao: order.metadata?.service_description || '',
+                orderId: order.id,
+                orderStatus: order.status,
+                orderAmount: order.amount,
+                orderCreatedAt: order.created_at
+              } : {
+                nome: 'Serviço não encontrado',
+                descricao: ''
+              },
+              pixCode: transacao.pix_code,
+              pixQrCode: transacao.pix_qr_code
+            };
+          } catch (error) {
+            console.error(`[API:TransacoesDiretoV2] Erro ao buscar pedido para transação ${transacao.id}:`, error);
+            return {
+              id: transacao.id,
+              status: transacao.status,
+              metodoPagamento: transacao.payment_method,
+              valor: transacao.amount,
+              dataCriacao: transacao.data_criacao,
+              cliente: {
+                nome: transacao.customer_name,
+                email: transacao.customer_email,
+                telefone: transacao.customer_phone
+              },
+              produto: {
+                nome: 'Erro ao buscar serviço',
+                descricao: ''
+              },
+              pixCode: transacao.pix_code,
+              pixQrCode: transacao.pix_qr_code
+            };
+          }
+        })
+      );
 
       return res.status(200).json({
-        transacoes,
+        transacoes: transacoesComPedidos,
         total,
         totalPaginas: Math.ceil(total / Number(limite)),
         paginaAtual: Number(pagina)
       });
 
     } finally {
-      client.release();
+      pagamentosClient.release();
+      ordersClient.release();
     }
 
   } catch (error) {
