@@ -3,12 +3,14 @@ import { Pool } from 'pg';
 
 // Conexão com o banco de dados de pagamentos
 const pagamentosPool = new Pool({
-  connectionString: process.env.PAGAMENTOS_DATABASE_URL || 'postgresql://postgres:zacEqGceWerpWpBZZqttjamDOCcdhRbO@shinkansen.proxy.rlwy.net:29036/railway',
-  ssl: { rejectUnauthorized: false },
-  max: 5,
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 5000,
-  keepAlive: true
+  connectionString: 'postgresql://postgres:zacEqGceWerpWpBZZqttjamDOCcdhRbO@shinkansen.proxy.rlwy.net:29036/railway',
+  ssl: { rejectUnauthorized: false }
+});
+
+// Conexão com o banco de dados de pedidos (orders)
+const ordersPool = new Pool({
+  connectionString: 'postgresql://postgres:cgbdNabKzdmLNJWfXAGgNFqjwpwouFXZ@switchyard.proxy.rlwy.net:44974/railway',
+  ssl: { rejectUnauthorized: false }
 });
 
 // Verificar conexão inicial
@@ -16,7 +18,11 @@ pagamentosPool.on('error', (err) => {
   console.error('[API:TransacoesDiretoV2:Pool] Erro no pool de conexão:', err.message);
 });
 
-console.log('[API:TransacoesDiretoV2:Init] Pool de conexão inicializado com a abordagem do script de teste');
+ordersPool.on('error', (err) => {
+  console.error('[API:TransacoesDiretoV2:OrdersPool] Erro no pool de conexão:', err.message);
+});
+
+console.log('[API:TransacoesDiretoV2:Init] Pools de conexão inicializados com as URLs diretas');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
