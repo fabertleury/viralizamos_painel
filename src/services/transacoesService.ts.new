@@ -1,0 +1,160 @@
+import { Pool } from 'pg';
+import { analyticsPool, obterTransacoes, obterTransacaoPorId, Transacao as AnalyticsTransacao } from './analyticsService';
+
+// Agora usamos o pool do serviço de Analytics
+export const pagamentosPool = analyticsPool;
+
+// Interface para transações
+export interface Transacao {
+  id: string;
+  data_criacao: Date;
+  valor: number;
+  status: string;
+  metodo_pagamento: string;
+  cliente_id: string;
+  cliente_nome: string;
+  cliente_email: string;
+  produto_id: string;
+  produto_nome: string;
+  order_id?: string;
+}
+
+// Função para buscar todas as transações com filtros
+export async function buscarTransacoes(
+  filtros: {
+    status?: string;
+    metodo?: string;
+    dataInicio?: string;
+    dataFim?: string;
+    termoBusca?: string;
+  } = {},
+  pagina = 1,
+  limite = 10
+): Promise<{ transacoes: Transacao[]; total: number }> {
+  try {
+    // Usar a função do analyticsService para obter transações com filtros
+    const result = await obterTransacoes({
+      status: filtros.status,
+      metodo: filtros.metodo,
+      dataInicio: filtros.dataInicio,
+      dataFim: filtros.dataFim,
+      termoBusca: filtros.termoBusca
+    }, pagina, limite);
+    
+    // Mapear para o formato esperado pelo painel
+    const transacoes = result.transacoes.map((transacao: AnalyticsTransacao) => ({
+      id: transacao.transaction_id,
+      data_criacao: new Date(transacao.created_at),
+      valor: transacao.amount || 0,
+      status: transacao.status || 'desconhecido',
+      metodo_pagamento: transacao.method || 'desconhecido',
+      cliente_id: transacao.user_id || '',
+      cliente_nome: transacao.cliente_nome || 'Cliente',
+      cliente_email: transacao.cliente_email || '',
+      produto_id: '', // Não temos essa informação diretamente no Analytics
+      produto_nome: 'Serviço', // Pode ser melhorado com uma junção com a tabela de serviços
+      order_id: transacao.order_id || ''
+    }));
+    
+    return { transacoes, total: result.total };
+  } catch (error) {
+    console.error('Erro ao buscar transações:', error);
+    return { transacoes: [], total: 0 };
+  }
+}
+
+// Função para buscar uma transação específica
+export async function buscarTransacaoPorId(id: string): Promise<Transacao | null> {
+  try {
+    // Usar a função do analyticsService para obter a transação específica
+    const transacao = await obterTransacaoPorId(id);
+    
+    if (!transacao) {
+      return null;
+    }
+    
+    // Mapear para o formato esperado pelo painel
+    return {
+      id: transacao.transaction_id,
+      data_criacao: new Date(transacao.created_at),
+      valor: transacao.amount || 0,
+      status: transacao.status || 'desconhecido',
+      metodo_pagamento: transacao.method || 'desconhecido',
+      cliente_id: transacao.user_id || '',
+      cliente_nome: transacao.user_name || 'Cliente',
+      cliente_email: transacao.user_email || '',
+      produto_id: '', // Não temos essa informação diretamente no Analytics
+      produto_nome: 'Serviço', // Pode ser melhorado com uma junção com a tabela de serviços
+      order_id: transacao.order_id || ''
+    };
+  } catch (error) {
+    console.error(`Erro ao buscar transação com ID ${id}:`, error);
+    return null;
+  }
+}
+
+// Função para obter estatísticas de transações
+export async function obterEstatisticasTransacoes(): Promise<any> {
+  try {
+    // Consultar estatísticas do banco Analytics
+    const query = `
+      SELECT 
+        COUNT(*) as total_transacoes,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as transacoes_aprovadas,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as transacoes_pendentes,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as transacoes_rejeitadas,
+        SUM(amount) as valor_total,
+        SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_aprovado
+      FROM analytics_transactions
+    `;
+    
+    const result = await pagamentosPool.query(query);
+    
+    return result.rows[0] || {
+      total_transacoes: 0,
+      transacoes_aprovadas: 0,
+      transacoes_pendentes: 0,
+      transacoes_rejeitadas: 0,
+      valor_total: 0,
+      valor_aprovado: 0
+    };
+  } catch (error) {
+    console.error('Erro ao obter estatísticas de transações:', error);
+    return {
+      total_transacoes: 0,
+      transacoes_aprovadas: 0,
+      transacoes_pendentes: 0,
+      transacoes_rejeitadas: 0,
+      valor_total: 0,
+      valor_aprovado: 0
+    };
+  }
+}
+
+// Função para obter transações por período (para gráficos)
+export async function obterTransacoesPorPeriodo(dias: number = 7): Promise<any[]> {
+  try {
+    // Consultar transações por período do banco Analytics
+    const query = `
+      SELECT 
+        DATE(created_at) as data,
+        COUNT(*) as quantidade,
+        SUM(amount) as valor_total,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as aprovadas,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pendentes,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejeitadas,
+        SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as valor_aprovado
+      FROM analytics_transactions
+      WHERE created_at >= NOW() - INTERVAL '${dias} days'
+      GROUP BY DATE(created_at)
+      ORDER BY data
+    `;
+    
+    const result = await pagamentosPool.query(query);
+    
+    return result.rows;
+  } catch (error) {
+    console.error('Erro ao obter transações por período:', error);
+    return [];
+  }
+}
